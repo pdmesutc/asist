@@ -801,7 +801,7 @@ function seansCard(s,opt){opt=opt||{};
   let act='';
   if(fin){
     if(s.durum==='bekliyor')act=`${fs?`<button class="btn sm primary" data-act="firmaTamamla" data-id="${s.id}">Tamamlandı</button>`:`<button class="btn sm primary" data-act="tahsilat" data-id="${s.id}">${ic('wallet')}Tahsilat</button>`}<button class="btn sm" data-act="ertele" data-id="${s.id}">Ertele</button><button class="btn sm ghost" data-act="seansDuz" data-id="${s.id}">Düzenle</button><button class="btn sm ghost" data-act="iptalSor" data-id="${s.id}">İptal</button>${gecti(s)?`<span class="note" style="color:var(--warn)">${fs?'Tamamlanmadı':'Ödeme girilmedi'}</span>`:''}`;
-    else if(s.durum==='odendi')act=`${fs?'<span class="note">Firma kapsamında · danışandan ücret alınmadı</span>':`<span class="note num">${s.odeme.kanal} · Ofis ${TL(s.odeme.ofis)} · Uzman ${TL(s.odeme.uzman)} · KDV ${TL(s.odeme.kdv)}</span>`}<button class="btn sm" data-act="seansDuz" data-id="${s.id}">Düzenle</button><button class="btn sm ghost" data-act="ertele" data-id="${s.id}">Ertele</button>`;
+    else if(s.durum==='odendi')act=`${fs?'<span class="note">Firma kapsamında · danışandan ücret alınmadı</span>':`<span class="note num">${s.odeme.kanal} · Ofis ${TL(s.odeme.ofis)} · Uzman ${TL(s.odeme.uzman)} · KDV ${TL(s.odeme.kdv)}</span>`}<button class="btn sm" data-act="seansDuz" data-id="${s.id}">Düzenle</button>`;
     else act=`<button class="btn sm ghost" data-act="geriAl" data-id="${s.id}">İptali geri al</button>`;
   }
   return`<article class="scard st-${s.durum} t-${TK[s.tur]}">
@@ -1416,7 +1416,7 @@ const A={
   tahsilatKaydet(d){const s=SE(d.id);const c=tHes();if(!(c.tahsilat>0)){toast('Geçerli bir tutar girin.',1);return}
     s.ucret=+val('t_brut');s.durum='odendi';s.odeme={...c,kanal:document.querySelector('input[name="t_kanal"]:checked').value,tarih:TODAY};iz(s,`Tahsilat ${TL(c.tahsilat)} · ${s.odeme.kanal}`);kapat();commit();toast(`Tahsilat kapatıldı · ${TL(c.tahsilat)}`)},
   tahsilatGeri(d){const s=SE(d.id);iz(s,`Tahsilat geri alındı (${TL(s.odeme?s.odeme.tahsilat:0)})`);s.durum='bekliyor';s.odeme=null;kapat();commit();toast('Tahsilat geri alındı.')},
-  ertele(d){const s=SE(d.id);const rooms=S.odalar.filter(o=>o.subeId===s.subeId);A._eid=d.id;
+  ertele(d){const s=SE(d.id);if(s.durum!=='bekliyor'){toast(s.durum==='odendi'?'Tahsilatı alınmış seans ertelenemez.':'İptal edilmiş seans ertelenemez.',1);return}const rooms=S.odalar.filter(o=>o.subeId===s.subeId);A._eid=d.id;
     sheet('Seansı ertele',`<div class="secili"><div class="grow"><b>${esc(D(s.danisanId).ad)}</b><span class="small muted">Şu an: ${fmtD(s.tarih)} ${s.saat} · ${esc(O(s.odaId).ad)}</span></div></div>
     <div class="row2">${fld('Yeni tarih',`<input type="date" id="e_t" value="${s.tarih}" data-chg="eKontrol">`)}${fld('Yeni saat',`<select id="e_h" data-chg="eKontrol">${SAATLER.filter(h=>(h>=B(s.subeId).acilis&&h<B(s.subeId).kapanis)||h===s.saat).map(h=>`<option ${h===s.saat?'selected':''}>${h}</option>`).join('')}</select>`)}</div>
     ${fld('Oda',`<select id="e_o" data-chg="eKontrol">${rooms.map(o=>`<option value="${o.id}" ${o.id===s.odaId?'selected':''}>${esc(o.ad)}</option>`).join('')}</select>`)}
