@@ -823,7 +823,7 @@ function vGorusmeler(){
   const bek=base.filter(s=>s.durum==='bekliyor').reduce((a,s)=>a+s.ucret,0);
   const tah=base.filter(s=>s.durum==='odendi').reduce((a,s)=>a+s.odeme.tahsilat,0);
   const uz=S.uzmanlar.filter(u=>u.subeIds.includes(UI.subeId));
-  return`<div class="page-head"><div><h1>Görüşmeler</h1><p>${esc(B(UI.subeId).ad)} şubesi · ${c.all-c.iptal} seans · tahsil edilen ${TL(tah)} · bekleyen ${TL(bek)}</p></div><button class="btn primary" data-act="go" data-v="randevu">${ic('plus')}Yeni randevu</button></div>
+  return`<div class="page-head"><div><h1>Görüşmeler</h1></div></div>
   ${perBar()}
   <div class="toolbar"><div class="chips durum-chips">${[['all','Tümü'],['bekliyor','Bekliyor'],['odendi','Ödendi'],['iptal','İptal']].map(([k,l])=>`<button class="chip ${gf.durum===k?'on':''}" data-act="gDurum" data-v="${k}">${l}<span class="n">${c[k]}</span></button>`).join('')}</div>
   <select class="inp" style="width:auto;min-height:38px;padding:4px 10px" data-chg="gUzman" aria-label="Uzman filtresi"><option value="all">Tüm uzmanlar</option>${uz.map(u=>`<option value="${u.id}" ${gf.uzman===u.id?'selected':''}>${esc(u.ad)}</option>`).join('')}</select></div>
