@@ -272,7 +272,13 @@ mark{background:color-mix(in srgb,var(--accent) 22%,transparent);color:inherit;b
 .slot.on{background:var(--ok);color:#fff;border-color:var(--ok)}
 .slot.busy,.slot.off{color:var(--muted);background:var(--surface-2);text-decoration:line-through;cursor:not-allowed}
 .slot.rchip{display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:6px 10px;text-align:left;min-height:46px;text-decoration:none;max-width:100%}
-.slot.rchip small{font-weight:500;font-size:.72rem;opacity:.9}
+.slot.rchip small{font-weight:500;font-size:.72rem;opacity:.9;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slot.rchip b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#r_odalar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+#r_odalar .rchip{width:100%;min-width:0}
+@media (min-width:960px){#r_odalar{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}}
+input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width:100%;display:block;box-sizing:border-box}
+input[type="date"]::-webkit-date-and-time-value{text-align:left;margin:0}
 .slot.rchip.busy{text-decoration:none}
 .slot.rchip.busy b{text-decoration:line-through}
 .ulist{display:flex;flex-direction:column;gap:6px}
