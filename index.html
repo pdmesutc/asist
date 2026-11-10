@@ -302,6 +302,7 @@ input[type="date"]::-webkit-date-and-time-value{text-align:left;margin:0}
 .kdvrow input[type=number]{flex:1;min-width:0}
 .kdvchk{flex:none;border:1px solid var(--line);border-radius:10px;padding:0 12px;min-height:46px;background:var(--surface);font-weight:600}
 .kanal{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+:where(.dl button.row),:where(.cell.full),:where(.scard){--tc:var(--accent)}
 .cmsg{border-radius:10px;padding:10px 12px;font-size:.86rem;display:flex;flex-direction:column;gap:4px}
 .cmsg.ok{background:color-mix(in srgb,var(--ok) 12%,transparent);color:var(--ok);font-weight:600}
 .cmsg.err{background:color-mix(in srgb,var(--bad) 10%,transparent);color:var(--bad);font-weight:600}
@@ -686,6 +687,7 @@ function demoFirmaDanisan(X){if(X.danisanlar.some(d=>d.id==='dfirma'))return;
 const KEY='asistpsikolog_v1',UIKEY='asistpsikolog_ui_v1';
 let S=null;
 try{const r=localStorage.getItem(KEY);if(r)S=JSON.parse(r)}catch(e){}
+function migrate(){
 if(!S||!S.v)S=seed();
 if(S.v<2){S.firmalar.forEach(f=>{if(f.seansHakki==null)f.seansHakki=6});
   const dm=new Map(S.danisanlar.map(d=>[d.id,d]));const fm=new Map(S.firmalar.map(f=>[f.id,f]));const c={};
@@ -699,6 +701,8 @@ if(S.v<5){S.ayar.yonetici=S.ayar.yonetici||{kullanici:'yonetici',sifre:'demo1234
   S.uzmanlar.forEach(u=>{if(!u.sifre)u.sifre='demo1234'});S.v=5}
 if(S.v<6){const y=S.ayar.yonetici;y.email=y.email||(y.kullanici&&y.kullanici.includes('@')?y.kullanici:'yonetici@asistpsikolog.com');delete y.kullanici;
   S.subeler.forEach((b,i)=>{if(b.asistan){b.asistan.email=b.asistan.email||(b.asistan.kullanici&&b.asistan.kullanici.includes('@')?b.asistan.kullanici:`asistan${i+1}@asistpsikolog.com`);delete b.asistan.kullanici}});S.v=6}
+}
+migrate();
 let UI={rol:null,subeId:'pen',uzmanId:'u1',view:null,gozlem:false,per:{tip:'gun',ref:TODAY}};
 try{const r=localStorage.getItem(UIKEY);if(r){const o=JSON.parse(r);if(!('hatirla' in o))o.rol=null;UI=Object.assign(UI,o,{per:{tip:'gun',ref:TODAY}})}}catch(e){}
 try{const r=sessionStorage.getItem(UIKEY);if(r){const o=JSON.parse(r);if(o.rol)Object.assign(UI,o)}}catch(e){}
@@ -708,12 +712,16 @@ function idx(){M={d:new Map(S.danisanlar.map(x=>[x.id,x])),u:new Map(S.uzmanlar.
 let _cnt=null,_sorted=null;
 const D=id=>M.d.get(id),U=id=>M.u.get(id),O=id=>M.o.get(id),SE=id=>M.s.get(id),F=id=>M.f.get(id),B=id=>M.b.get(id);
 function iz(s,islem){(s.gecmis=s.gecmis||[]).push({z:new Date().toISOString(),k:UI.gozlem?'Yönetici (gözlem)':rolAd[aktifRol()]||'',i:islem})}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+const IDB={db:null,open(){return new Promise((res,rej)=>{try{const r=indexedDB.open('asistpsikolog',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}catch(e){rej(e)}})},
+  async get(k){const db=this.db||(this.db=await this.open());return new Promise((res,rej)=>{const q=db.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)})},
+  async set(k,v){const db=this.db||(this.db=await this.open());return new Promise((res,rej)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);tx.onabort=()=>rej(tx.error)})}};
+let _hazir=false;
+function save(){if(!_hazir)return;IDB.set(KEY,S).then(()=>{try{localStorage.removeItem(KEY)}catch(e){}}).catch(()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Veriler kaydedilemedi: tarayıcının depolama alanı dolu.',1)}})}
 function saveUI(){const o={rol:UI.rol,subeId:UI.subeId,uzmanId:UI.uzmanId,view:UI.view,hatirla:!!UI.hatirla,girisRol:UI.girisRol};
   try{localStorage.setItem(UIKEY,JSON.stringify(UI.hatirla?o:{...o,rol:null}))}catch(e){}try{sessionStorage.setItem(UIKEY,JSON.stringify(o))}catch(e){}}
 function oturumGecerli(){if(UI.rol==='psikolog'){const u=U(UI.uzmanId);return!!(u&&u.aktif)}if(UI.rol==='asistan')return!!B(UI.subeId);return UI.rol==='yonetici'}
 function commit(){save();idx();render()}
-idx();save();
+idx();
 
 function sayac(){ if(_cnt)return _cnt; _cnt={};S.seanslar.forEach(s=>{if(s.durum!=='iptal')_cnt[s.danisanId]=(_cnt[s.danisanId]||0)+1});return _cnt}
 const toplamSeans=d=>(d.arsiv||0)+(sayac()[d.id]||0);
@@ -779,7 +787,8 @@ function alicilar(d){const a=[];if(!d)return a;
   if(d.sms.ana&&d.tel)a.push({ad:d.ad,tel:d.tel});
   if(d.sms.es&&d.es&&d.es.tel)a.push({ad:d.es.ad,tel:d.es.tel});
   if(d.sms.anne&&d.anne&&d.anne.tel)a.push({ad:d.anne.ad,tel:d.anne.tel});
-  if(d.sms.baba&&d.baba&&d.baba.tel)a.push({ad:d.baba.ad,tel:d.baba.tel});return a}
+  if(d.sms.baba&&d.baba&&d.baba.tel)a.push({ad:d.baba.ad,tel:d.baba.tel});
+  if(d.sms.veli&&d.veli&&d.veli.tel)a.push({ad:d.veli.ad,tel:d.veli.tel});return a}
 function smsAt(tip,s,list){const metin=doldur(S.sablon[tip]||'',s);const zaman=new Date().toISOString();
   list.forEach(a=>S.smsLog.unshift({id:uid('m'),zaman,tip,alici:a.ad,tel:a.tel,metin,durum:S.netgsm.kod?'NetGSM kuyruğu':'Simülasyon',subeId:s.subeId}));
   S.smsLog=S.smsLog.slice(0,400);return list.length}
@@ -794,10 +803,11 @@ const val=id=>{const e=document.getElementById(id);return e?e.value.trim():''};
 const chk=id=>{const e=document.getElementById(id);return!!(e&&e.checked)};
 const durumAd={bekliyor:'Bekliyor',odendi:'Ödendi',iptal:'İptal'};
 const badge=s=>`<span class="badge b-${s}">${durumAd[s]}</span>`;
-const tchip=t=>`<span class="tchip t-${TK[t]}">${t}</span>`;
+const tchip=t=>t?`<span class="tchip t-${TK[t]}">${t}</span>`:'';
+const kayAd=k=>KAYNAK[k]||'Kaynak belirtilmemiş';
 
 const NAV={
-  yonetici:[['ozet','Genel Bakış','grid'],['ykasa','Şube Kasası','wallet'],['ygider','Giderler','receipt'],['subeler','Şubeler & Odalar','building'],['uzmanlar','Uzmanlar','users'],['fiyat','Hizmet & Fiyat','tag'],['firmalar','Kurumsal Firmalar','brief'],['smsayar','SMS Merkezi','msg']],
+  yonetici:[['ozet','Genel Bakış','grid'],['ykasa','Şube Kasası','wallet'],['ygider','Giderler','receipt'],['subeler','Şubeler & Odalar','building'],['uzmanlar','Uzmanlar','users'],['fiyat','Hizmet & Fiyat','tag'],['firmalar','Kurumsal Firmalar','brief'],['smsayar','SMS Merkezi','msg'],['aktar','Veri Aktarımı','dl']],
   asistan:[['gorusmeler','Görüşmeler','list'],['takvim','Oda Takvimi','cal'],['randevu','Yeni Randevu','plus'],['danisanlar','Danışanlar','users'],['kasa','Şube Kasası','wallet'],['giderler','Giderler','receipt'],['sms','Toplu SMS','msg'],['firma','Firma Raporu','brief']],
   psikolog:[['ajanda','Görüşmeler','list'],['danisanlarim','Danışanlar','users'],['kendi','Yeni Randevu','plus'],['hakedis','Hak Ediş','wallet'],['musaitlik','Müsaitlik','clock']]};
 const rolAd={yonetici:'Yönetici',asistan:'Asistan',psikolog:'Psikolog'};
@@ -821,7 +831,7 @@ function render(){
       <div class="brand">${LOGO("full",36)}</div>
       <div class="navgrp">${rolAd[rol]} paneli</div>
       ${items.map(i=>`<button class="nv ${i[0]===UI.view?'on':''}" data-act="go" data-v="${i[0]}">${ic(i[2])}${i[1]}</button>`).join('')}
-      <div class="foot">Demo sürüm · veriler bu tarayıcıda saklanır</div>
+      <div class="foot">${S.kaynakDosya?'':'Demo sürüm · '}veriler bu tarayıcıda saklanır</div>
     </aside>
     <div class="main">
       <header class="top"><div class="top-in">
@@ -856,8 +866,8 @@ function vLogin(){
     <div class="auth-row"><label class="chk"><input type="checkbox" id="g_hatirla" ${UI.hatirla?'checked':''}> Beni hatırla</label><button type="button" class="linkbtn" data-act="sifreUnut">Şifremi unuttum</button></div>
     <div id="g_hata" class="cmsg err" role="alert" hidden></div>
     <button type="submit" class="btn primary lg block" id="g_btn">Giriş Yap</button>
-    <details class="auth-demo"><summary>Demo hesapları</summary><div class="auth-demo-in"><span class="small muted">Bu sürüm tanıtım amaçlıdır. Bir hesaba dokunun, bilgiler doldurulsun. Şifrelerin hepsi <b>demo1234</b>.</span>
-      ${demo.map(([r,k,ad])=>`<button type="button" class="auth-demo-btn" data-act="demoDoldur" data-r="${r}" data-k="${esc(k)}"><b>${esc(ad)} <small class="muted">· ${ROL_AD[r]}</small></b><span>${esc(k)}</span></button>`).join('')}</div></details>
+    ${S.kaynakDosya?'':`<details class="auth-demo"><summary>Demo hesapları</summary><div class="auth-demo-in"><span class="small muted">Bu sürüm tanıtım amaçlıdır. Bir hesaba dokunun, bilgiler doldurulsun. Şifrelerin hepsi <b>demo1234</b>.</span>
+      ${demo.map(([r,k,ad])=>`<button type="button" class="auth-demo-btn" data-act="demoDoldur" data-r="${r}" data-k="${esc(k)}"><b>${esc(ad)} <small class="muted">· ${ROL_AD[r]}</small></b><span>${esc(k)}</span></button>`).join('')}</div></details>`}
     <a class="auth-back-m" href="anasayfa.html">← Tanıtım sayfasına dön</a>
   </form></main></div>`}
 function hesapBul(rol,k){k=low(String(k||'').trim());if(!k)return null;
@@ -878,13 +888,13 @@ function seansCard(s,opt){opt=opt||{};
   let act='';
   if(fin){
     if(s.durum==='bekliyor')act=`${fs?`<button class="btn sm primary" data-act="firmaTamamla" data-id="${s.id}">Tamamlandı</button>`:`<button class="btn sm primary" data-act="tahsilat" data-id="${s.id}">${ic('wallet')}Tahsilat</button>`}<button class="btn sm" data-act="ertele" data-id="${s.id}">Ertele</button><button class="btn sm ghost" data-act="seansDuz" data-id="${s.id}">Düzenle</button><button class="btn sm ghost" data-act="iptalSor" data-id="${s.id}">İptal</button>${gecti(s)?`<span class="note" style="color:var(--warn)">${fs?'Tamamlanmadı':'Ödeme girilmedi'}</span>`:''}`;
-    else if(s.durum==='odendi')act=`${fs?'<span class="note">Firma kapsamında · danışandan ücret alınmadı</span>':`<span class="note num">${s.odeme.kanal} · ${s.odeme.kdvOran?`KDV'li (KDV ${TL(s.odeme.kdv)})`:"KDV'siz"} · Ofis %${s.odeme.oran??oran(s)} ${TL(s.odeme.ofis)} · Uzman ${TL(s.odeme.uzman)}</span>`}<button class="btn sm" data-act="seansDuz" data-id="${s.id}">Düzenle</button>`;
+    else if(s.durum==='odendi')act=`${fs?'<span class="note">Firma kapsamında · danışandan ücret alınmadı</span>':`<span class="note num">${s.odeme.kanal?s.odeme.kanal+' · ':''}${s.odeme.kdvOran?`KDV'li (KDV ${TL(s.odeme.kdv)})`:"KDV'siz"} · Ofis %${s.odeme.oran??oran(s)} ${TL(s.odeme.ofis)} · Uzman ${TL(s.odeme.uzman)}</span>`}<button class="btn sm" data-act="seansDuz" data-id="${s.id}">Düzenle</button>`;
     else act=`<button class="btn sm ghost" data-act="geriAl" data-id="${s.id}">İptali geri al</button>`;
   }
   return`<article class="scard st-${s.durum} t-${TK[s.tur]}">
     <div class="s-time">${s.saat}<small>${esc(o?o.ad:'')}</small></div>
     <div class="s-main"><button class="s-name" style="background:none;border:0;padding:0;text-align:left" data-act="${opt.psikolog?'pDanisan':'danisanDetay'}" data-id="${d.id}">${esc(d.ad)}${fs?`<span class="badge b-firma">${esc(fs.ad)}</span>`:''}</button>
-      <div class="s-meta">${tchip(s.tur)}${s.sadeceEbeveyn?'<span class="tchip t-coc">Ebeveyn görüşmesi</span>':''}<span>${opt.psikolog?esc(B(s.subeId).ad)+' şubesi':esc(u.ad)}</span><span>· ${KAYNAK[s.kaynak]}</span></div></div>
+      <div class="s-meta">${tchip(s.tur)}${s.sadeceEbeveyn?'<span class="tchip t-coc">Ebeveyn görüşmesi</span>':''}<span>${opt.psikolog?esc(B(s.subeId).ad)+' şubesi':esc(u.ad)}</span><span>· ${kayAd(s.kaynak)}</span></div></div>
     <div class="s-side">${sBadge(s)}${fin?(fs?'<b class="small muted">Ücretsiz</b>':`<b>${TL(s.durum==='odendi'?s.odeme.tahsilat:s.ucret)}</b>`):''}</div>
     ${act?`<div class="s-act">${act}</div>`:''}
   </article>`}
@@ -909,7 +919,7 @@ function vGorusmeler(){
 /* Tahsilat */
 function tahsilatSheet(id){const s=SE(id),d=D(s.danisanId),u=U(s.uzmanId);const vo=oran(s);
   sheet('Tahsilat al',`<div class="secili"><div class="grow"><b>${esc(d.ad)}</b><span class="small muted">${fmtD(s.tarih)} ${s.saat} · ${esc(u.ad)} · ${s.tur}</span></div>${tchip(s.tur)}</div>
-  ${odemeAlanlari('t',s.ucret,true,vo,`${KAYNAK[s.kaynak]} için ${esc(u.ad)} varsayılanı %${vo}`,'Nakit')}
+  ${odemeAlanlari('t',s.ucret,true,vo,`${kayAd(s.kaynak)} için ${esc(u.ad)} varsayılanı %${vo}`,'Nakit')}
   <div class="calc" id="t_prev"></div>`,
   `<button class="btn" data-act="kapat">Vazgeç</button><button class="btn primary" data-act="tahsilatKaydet" data-id="${id}">Tahsilatı kapat</button>`);
   A._tid=id;A.tCalc()}
@@ -917,7 +927,7 @@ function odemeAlanlari(p,tutar,kdvli,oranV,ipucu,kanal){return`
   <div class="field"><span>Alınan ücret (₺)</span><div class="kdvrow"><input id="${p}_brut" type="number" inputmode="decimal" min="0" value="${tutar}" data-in="${p}Calc"><label class="chk kdvchk"><input type="checkbox" id="${p}_kdvli" ${kdvli?'checked':''} data-chg="${p}Calc"> KDV'li</label></div>
     <small class="muted" id="${p}_kdvnot"></small></div>
   <div class="field"><span>Ofis payı (%)</span><input id="${p}_oran" type="number" inputmode="decimal" min="0" max="100" value="${oranV}" data-in="${p}Calc" data-varsayilan="${oranV}"><small class="muted" id="${p}_orannot">${ipucu}</small></div>
-  <div class="kanal"><span class="lbl">Ödeme kanalı</span><div class="seg"><label><input type="radio" name="${p}_kanal" value="Nakit" ${kanal!=='Havale/EFT'?'checked':''}>Nakit</label><label><input type="radio" name="${p}_kanal" value="Havale/EFT" ${kanal==='Havale/EFT'?'checked':''}>Havale / EFT</label></div></div>`}
+  <div class="kanal"><span class="lbl">Ödeme kanalı</span><div class="seg"><label><input type="radio" name="${p}_kanal" value="Nakit" ${kanal!=='Havale/EFT'&&kanal!==''?'checked':''}>Nakit</label><label><input type="radio" name="${p}_kanal" value="Havale/EFT" ${kanal==='Havale/EFT'?'checked':''}>Havale / EFT</label></div></div>`}
 function odemeHes(p){return hesapla(val(p+'_brut'),chk(p+'_kdvli')?S.ayar.kdv:0,true,Math.min(100,Math.max(0,+val(p+'_oran')||0)))}
 function calcHtml(c,p){const n=$('#'+p+'_kdvnot');if(n)n.textContent=c.kdvOran?`İşaretli: tutarın içinde %${c.kdvOran} KDV var, hak ediş KDV düşülerek hesaplanır.`:`İşaretsiz: tutar KDV'siz, hak ediş tutarın tamamı üzerinden hesaplanır.`;
   return`<div><span>Alınan ücret</span><b>${TL(c.tahsilat)}</b></div><div><span>${c.kdvOran?`KDV (%${c.kdvOran})`:'KDV'}</span><span>${c.kdvOran?'− '+TL(c.kdv):'Yok'}</span></div><div><span>KDV hariç tutar (matrah)</span><span>${TL(c.matrah)}</span></div><div><span>Ofis payı (%${c.oran})</span><span>${TL(c.ofis)}</span></div><div class="tot"><span>Uzman hak edişi (%${100-c.oran})</span><span>${TL(c.uzman)}</span></div>`}
@@ -941,7 +951,7 @@ function vTakvim(){
 function odaKisa(r){let w=r.ad.replace(/\s*(Odası|Oda)(?=\s|$)/i,'').trim()||r.ad;const p=w.split(' ');if(p[0].length>6)p[0]=p[0].slice(0,3)+'.';return p.join(' ')}
 function seansDetay(id){const s=SE(id),d=D(s.danisanId),u=U(s.uzmanId),o=O(s.odaId);
   sheet('Seans detayı',`<div class="secili"><div class="grow"><b>${esc(d.ad)}</b><span class="small muted">${esc(d.tel)}</span></div>${badge(s.durum)}</div>
-  <dl class="kv"><dt>Tarih</dt><dd>${fmtLong(s.tarih)} · ${s.saat}</dd><dt>Uzman</dt><dd>${esc(u.ad)}</dd><dt>Oda</dt><dd>${esc(o.ad)} (${o.tur})</dd><dt>Tür</dt><dd>${s.tur}${s.sadeceEbeveyn?' · sadece ebeveyn':''}</dd><dt>Kaynak</dt><dd>${KAYNAK[s.kaynak]}${s.kaynak==='firma'?` · ${esc(F(s.firmaId).ad)}`:''}</dd><dt>Ücret</dt><dd class="num">${s.kaynak==='firma'?'Ücretsiz (firma danışanı)':TL(s.ucret)}</dd>${s.not?`<dt>Not</dt><dd>${esc(s.not)}</dd>`:''}</dl>`,
+  <dl class="kv"><dt>Tarih</dt><dd>${fmtLong(s.tarih)} · ${s.saat}</dd><dt>Uzman</dt><dd>${esc(u.ad)}</dd><dt>Oda</dt><dd>${esc(o.ad)} (${o.tur})</dd><dt>Tür</dt><dd>${s.tur||'Belirtilmemiş'}${s.sadeceEbeveyn?' · sadece ebeveyn':''}</dd><dt>Kaynak</dt><dd>${kayAd(s.kaynak)}${s.kaynak==='firma'?` · ${esc(F(s.firmaId).ad)}`:''}</dd><dt>Ücret</dt><dd class="num">${s.kaynak==='firma'?'Ücretsiz (firma danışanı)':TL(s.ucret)}</dd>${s.not?`<dt>Not</dt><dd>${esc(s.not)}</dd>`:''}</dl>`,
   s.durum==='bekliyor'?`<button class="btn ghost" data-act="iptalSor" data-id="${id}">İptal</button><button class="btn" data-act="ertele" data-id="${id}">Ertele</button>${s.kaynak==='firma'?`<button class="btn primary" data-act="firmaTamamla" data-id="${id}">Tamamlandı</button>`:`<button class="btn primary" data-act="tahsilat" data-id="${id}">Tahsilat</button>`}`:`<button class="btn" data-act="danisanDetay" data-id="${d.id}">Danışan kartı</button>`)}
 
 /* ============ Randevu formu (asistan + psikolog) ============ */
@@ -1100,14 +1110,14 @@ function rInit(){const p=UI.prefill||{};UI.prefill=null;
 
 /* ============ Danışan rehberi ============ */
 function vDanisanlar(){UI.dk=UI.dk||'sube';
-  return`<div class="page-head"><div><h1>Danışanlar</h1><p>${S.danisanlar.length.toLocaleString('tr-TR')} kayıt · 2023–2025 arşivi ve güncel seanslar birlikte sayılır</p></div><button class="btn primary" data-act="go" data-v="randevu">${ic('plus')}Yeni randevu</button></div>
+  return`<div class="page-head"><div><h1>Danışanlar</h1><p>${S.danisanlar.length.toLocaleString('tr-TR')} kayıt${S.kaynakDosya?'':' · 2023–2025 arşivi ve güncel seanslar birlikte sayılır'}</p></div><button class="btn primary" data-act="go" data-v="randevu">${ic('plus')}Yeni randevu</button></div>
   <div class="toolbar"><div class="search">${ic('search')}<input id="dq" placeholder="Ad, telefon veya veli adı ile ara" value="${esc(UI.dq||'')}" data-in="dAra" aria-label="Danışan ara"></div>
   <div class="seg"><button class="${UI.dk==='sube'?'on':''}" data-act="dKapsam" data-v="sube">Sadece bu şube</button><button class="${UI.dk==='tum'?'on':''}" data-act="dKapsam" data-v="tum">Tüm şubeler</button></div></div>
   <div id="dList">${dListHTML()}</div>`}
 function dFiltre(list,q){if(!q)return list;const ql=low(q),qd=digits(q);
-  return list.filter(d=>low(d.ad).includes(ql)||(qd.length>=3&&(digits(d.tel).includes(qd)||(d.anne&&digits(d.anne.tel).includes(qd))||(d.baba&&digits(d.baba.tel).includes(qd))||(d.es&&digits(d.es.tel).includes(qd))))||(d.anne&&low(d.anne.ad).includes(ql))||(d.baba&&low(d.baba.ad).includes(ql))||(d.es&&low(d.es.ad).includes(ql)))}
+  return list.filter(d=>low(d.ad).includes(ql)||(qd.length>=3&&(digits(d.tel).includes(qd)||(d.anne&&digits(d.anne.tel).includes(qd))||(d.baba&&digits(d.baba.tel).includes(qd))||(d.es&&digits(d.es.tel).includes(qd))))||(d.anne&&low(d.anne.ad).includes(ql))||(d.baba&&low(d.baba.ad).includes(ql))||(d.es&&low(d.es.ad).includes(ql))||(d.veli&&(low(d.veli.ad).includes(ql)||(qd.length>=3&&digits(d.veli.tel).includes(qd)))))}
 function hl(t,q){if(!q||q.length<2)return esc(t);const i=low(t).indexOf(low(q));if(i<0)return esc(t);return esc(t.slice(0,i))+'<mark>'+esc(t.slice(i,i+q.length))+'</mark>'+esc(t.slice(i+q.length))}
-function dRows(list,q,act,maskTel){return list.map(d=>`<button class="row t-${TK[d.tur]}" data-act="${act}" data-id="${d.id}"><span class="av">${ini(d.ad)}</span><span style="min-width:0"><span class="nm">${hl(d.ad,q)}${d.firmaId?`<span class="badge b-firma">${esc(F(d.firmaId).ad)}</span>`:''}</span><span class="mt">${maskTel?'Telefon gizli':esc(d.tel)} · ${d.tur} · ${esc(B(d.subeId).ad)}</span></span><span class="cnt">${toplamSeans(d)}<small>seans</small></span></button>`).join('')}
+function dRows(list,q,act,maskTel){return list.map(d=>`<button class="row t-${TK[d.tur]}" data-act="${act}" data-id="${d.id}"><span class="av">${ini(d.ad)}</span><span style="min-width:0"><span class="nm">${hl(d.ad,q)}${d.firmaId?`<span class="badge b-firma">${esc(F(d.firmaId).ad)}</span>`:''}</span><span class="mt">${maskTel?'Telefon gizli':esc(d.tel)} · ${d.tur?d.tur+' · ':''}${esc(B(d.subeId).ad)}</span></span><span class="cnt">${toplamSeans(d)}<small>seans</small></span></button>`).join('')}
 function dListHTML(){const q=UI.dq||'';let list=sorted();if(UI.dk!=='tum')list=list.filter(d=>d.subeId===UI.subeId);list=dFiltre(list,q);
   const per=50,pages=Math.max(1,Math.ceil(list.length/per));UI.dp=Math.min(UI.dp||0,pages-1);const st=UI.dp*per;
   if(!list.length)return`<div class="empty"><b>Sonuç bulunamadı</b>“${esc(q)}” ile eşleşen danışan yok. Yeni randevu formundan kayıt oluşturabilirsiniz.</div>`;
@@ -1120,13 +1130,13 @@ function danisanDetay(id,psk){const d=D(id);const self=psk?U(UI.uzmanId):null;
   const kart=(lab,p)=>p&&p.ad?`<div class="ccard"><small>${lab}</small><b>${esc(p.ad)}</b>${T(p.tel)}</div>`:'';
   const ars=psk?0:(d.arsiv||0);
   const nF=ses.filter(s=>s.kaynak==='firma').length,uc=ses.filter(s=>s.kaynak!=='firma'),odenen=uc.filter(s=>s.durum==='odendi').reduce((a,s)=>a+s.odeme.tahsilat,0),bekleyen=uc.filter(s=>s.durum==='bekliyor').reduce((a,s)=>a+s.ucret,0);
-  const tutar=s=>s.kaynak==='firma'?'Ücretsiz · firma':s.durum==='odendi'?`${TL(s.odeme.tahsilat)} · ${s.odeme.kanal}`:`${TL(s.ucret)} · ödenmedi`;
+  const tutar=s=>s.kaynak==='firma'?'Ücretsiz · firma':s.durum==='odendi'?`${TL(s.odeme.tahsilat)}${s.odeme.kanal?' · '+s.odeme.kanal:''}`:`${TL(s.ucret)} · ödenmedi`;
   sheet(esc(d.ad),`<div class="chips">${tchip(d.tur)}<span class="badge b-pasif">${esc(B(d.subeId).ad)} şubesi</span>${d.firmaId&&F(d.firmaId)?`<span class="badge b-firma">${esc(F(d.firmaId).ad)}</span>`:''}${d.sahipUzmanId?`<span class="badge b-pasif">Kendi danışanı: ${esc(U(d.sahipUzmanId).ad)}</span>`:''}</div>
-  <div class="ccards">${d.tur!=='Çocuk'?`<div class="ccard"><small>Danışan</small><b>${esc(d.ad)}</b>${T(d.tel)}</div>`:''}${kart('Eş / partner',d.es)}${kart('Anne',d.anne)}${kart('Baba',d.baba)}</div>
+  <div class="ccards">${d.tur!=='Çocuk'?`<div class="ccard"><small>Danışan</small><b>${esc(d.ad)}</b>${T(d.tel)}</div>`:''}${kart('Eş / partner',d.es)}${kart('Anne',d.anne)}${kart('Baba',d.baba)}${kart('Veli',d.veli)}</div>
   <div class="stats"><div class="stat"><span class="k">Toplam seans</span><span class="v">${ars+ses.length}</span><span class="d">${psk?'Sizinle yapılan':[ars?`Arşiv ${ars}`:'',nF?`Firma ${nF}`:'',`Ücretli ${uc.length}`].filter(Boolean).join(' + ')}</span></div>
   ${!psk&&nF?`<div class="stat"><span class="k">Firma kapsamında</span><span class="v">${nF}</span><span class="d">${esc(F(ses.find(s=>s.kaynak==='firma').firmaId).ad)} · ücretsiz</span></div>`:''}
   ${!psk&&uc.length?`<div class="stat"><span class="k">Ücretli seanslar</span><span class="v">${uc.length}</span><span class="d">Ödenen ${TL(odenen)}${bekleyen?` · bekleyen ${TL(bekleyen)}`:''}</span></div>`:''}<div class="stat"><span class="k">Son / sonraki</span><span class="v" style="font-size:1rem">${ses.length?fmtD(ses[ses.length-1].tarih,{day:'numeric',month:'short',year:'numeric'}):'—'}</span><span class="d">${ses.length?esc(U(ses[ses.length-1].uzmanId).ad):'Güncel seans yok'}</span></div></div>
-  <div><h3 style="margin-bottom:6px">Seans geçmişi (iptaller hariç)</h3><div class="hist">${ars?`<div><b>1–${ars}.</b><span class="muted">2023–2025 arşiv kayıtları</span><span></span></div>`:''}
+  <div><h3 style="margin-bottom:6px">Seans geçmişi (iptaller hariç)</h3><div class="hist">${ars?`<div><b>1–${ars}.</b><span class="muted">Arşiv kayıtları</span><span></span></div>`:''}
   ${ses.map((s,i)=>`<div><b>${ars+i+1}. seans</b><span>${fmtD(s.tarih,{day:'numeric',month:'short',year:'numeric'})} ${s.saat} · ${psk?esc(B(s.subeId).ad):esc(U(s.uzmanId).ad)}${s.kaynak==='firma'?' · <span class="tchip t-onl">Firma</span>':''}</span><span style="text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:2px">${sBadge(s)}${psk?'':`<small class="muted num">${tutar(s)}</small>`}</span></div>${!psk&&ses[i+1]&&(s.kaynak==='firma')!==(ses[i+1].kaynak==='firma')?`<div style="display:block;padding:4px 0;border-bottom:1px dashed var(--line)"><small class="muted">${s.kaynak==='firma'?'↓ Firma kapsamı sona erdi · ücretli sürece geçildi':`↓ Firma kapsamına yeniden alındı · ${esc((F(ses[i+1].firmaId)||{}).ad||'')}`}</small></div>`:''}`).join('')||(!ars?'<div><span></span><span class="muted">Henüz seans yok</span><span></span></div>':'')}</div></div>`,
   psk?`<button class="btn" data-act="kapat">Kapat</button><button class="btn primary" data-act="danisanRandevu" data-id="${id}">${ic('plus')}Yeni randevu</button>`:`<button class="btn" data-act="danisanDuz" data-id="${id}">Bilgileri düzenle</button><button class="btn primary" data-act="danisanRandevu" data-id="${id}">${ic('plus')}Yeni randevu</button>`)}
 
@@ -1135,7 +1145,7 @@ function kasa(subeId,b,e,uzmanId){
   const r={tahsilat:0,kdv:0,matrah:0,ofis:0,uzman:0,nakit:0,havale:0,adet:0,masraf:0,uz:{}};
   S.seanslar.forEach(s=>{if(s.durum!=='odendi'||s.tarih<b||s.tarih>e)return;if(subeId&&s.subeId!==subeId)return;if(uzmanId&&s.uzmanId!==uzmanId)return;
     const o=s.odeme;r.tahsilat+=o.tahsilat;r.kdv+=o.kdv;r.matrah+=o.matrah;r.ofis+=o.ofis;r.uzman+=o.uzman;r.adet++;
-    if(o.kanal==='Nakit')r.nakit+=o.tahsilat;else r.havale+=o.tahsilat;
+    if(o.kanal==='Nakit')r.nakit+=o.tahsilat;else if(o.kanal==='Havale/EFT')r.havale+=o.tahsilat;
     const x=r.uz[s.uzmanId]=r.uz[s.uzmanId]||{adet:0,brut:0,ofis:0,uzman:0,kdv:0};x.adet++;x.brut+=o.tahsilat;x.ofis+=o.ofis;x.uzman+=o.uzman;x.kdv+=o.kdv});
   S.masraflar.forEach(m=>{if(m.tarih<b||m.tarih>e)return;if(subeId&&m.subeId!==subeId)return;r.masraf+=m.tutar});
   r.net=r.ofis-r.masraf;return r}
@@ -1202,10 +1212,10 @@ function vFirma(){if(UI.per.tip==='gun'||UI.per.tip==='hafta'){UI.per.tip='ay'}
   ${fs.length?`<div class="toolbar"><select class="inp" style="width:auto" data-chg="firmaSec" aria-label="Firma">${fs.map(f=>`<option value="${f.id}" ${f.id===UI.fsec?'selected':''}>${esc(f.ad)}</option>`).join('')}</select>
   <button class="btn" data-act="csv" ${list.length?'':'disabled'}>${ic('dl')}Excel / CSV indir</button><button class="btn ghost" data-act="csvKopya" ${list.length?'':'disabled'}>${ic('copy')}Kopyala</button></div>
   <div class="stats"><div class="stat"><span class="k">Firma kapsamında seans</span><span class="v">${list.length}</span><span class="d">${tam} tamamlandı · ${list.length-tam} planlı/bekleyen</span></div><div class="stat"><span class="k">Danışan</span><span class="v">${dset.length}</span><span class="d">Firma kapsamında görüşen</span></div></div>
-  ${list.length?`<div class="tw"><table class="tbl"><thead><tr><th>Tarih</th><th>Danışan</th><th>Uzman</th><th>Tür</th><th>Durum</th></tr></thead><tbody>${list.map(s=>`<tr><td class="num">${fmtD(s.tarih,{day:'2-digit',month:'2-digit',year:'numeric'})} ${s.saat}</td><td>${esc(D(s.danisanId).ad)}</td><td>${esc(U(s.uzmanId).ad)}</td><td>${s.tur}</td><td>${sBadge(s)}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="4">Toplam</td><td>${list.length} seans</td></tr></tfoot></table></div>`:'<div class="empty"><b>Bu dönemde firma seansı yok</b></div>'}`
+  ${list.length?`<div class="tw"><table class="tbl"><thead><tr><th>Tarih</th><th>Danışan</th><th>Uzman</th><th>Tür</th><th>Durum</th></tr></thead><tbody>${list.map(s=>`<tr><td class="num">${fmtD(s.tarih,{day:'2-digit',month:'2-digit',year:'numeric'})} ${s.saat}</td><td>${esc(D(s.danisanId).ad)}</td><td>${esc(U(s.uzmanId).ad)}</td><td>${s.tur||'—'}</td><td>${sBadge(s)}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="4">Toplam</td><td>${list.length} seans</td></tr></tfoot></table></div>`:'<div class="empty"><b>Bu dönemde firma seansı yok</b></div>'}`
   :'<div class="empty"><b>Bu şubeye tanımlı kurumsal firma yok</b>Yönetici panelinden firma ekleyebilirsiniz.</div>'}`}
 function csvMetni(){const[b,e]=perRange();const list=firmaListe(UI.fsec,b,e,UI.subeId);const q=x=>'"'+String(x).replace(/"/g,'""')+'"';
-  return['Tarih;Saat;Danışan;Uzman;Tür;Durum'].concat(list.map(s=>[s.tarih,s.saat,D(s.danisanId).ad,U(s.uzmanId).ad,s.tur,s.durum==='odendi'?'Tamamlandı':durumAd[s.durum]].map(q).join(';'))).join('\n')}
+  return['Tarih;Saat;Danışan;Uzman;Tür;Durum'].concat(list.map(s=>[s.tarih,s.saat,D(s.danisanId).ad,U(s.uzmanId).ad,s.tur||'',s.durum==='odendi'?'Tamamlandı':durumAd[s.durum]].map(q).join(';'))).join('\n')}
 
 /* ============ YÖNETİCİ ============ */
 function vOzet(){if(UI.per.tip==='gun'&&!UI._ozetSet){UI.per.tip='ay';UI._ozetSet=1}
@@ -1319,7 +1329,7 @@ function vHakedis(){const u=U(UI.uzmanId);if(!UI._hkSet){UI.per={tip:'ay',ref:TO
   ${perBar()}
   <div class="stats"><div class="stat hero"><span class="k">Toplam hak ediş</span><span class="v">${TL(k.uzman)}</span><span class="d">${k.adet} tamamlanan seans · ${perLabel()}</span></div>
   <div class="stat"><span class="k">Ödenen</span><span class="v" style="color:var(--ok)">${TL(od)}</span><span class="d">Ofisin ödendi işaretlediği aylar</span></div><div class="stat"><span class="k">Bekleyen ödeme</span><span class="v">${TL(Math.max(0,k.uzman-od))}</span>${bek?`<span class="d" style="color:var(--warn)">${bek} seansın tahsilatı henüz girilmedi</span>`:''}</div></div>
-  ${list.length?`<div class="tw"><table class="tbl"><thead><tr><th>Tarih</th><th>Danışan</th><th>Şube</th><th>Kaynak</th><th class="r">Matrah</th><th class="r">Ofis payı</th><th class="r">Hak ediş</th><th>Ödeme</th></tr></thead><tbody>${list.map(s=>`<tr><td class="num">${fmtD(s.tarih,{day:'numeric',month:'short'})} ${s.saat}</td><td>${esc(D(s.danisanId).ad)}</td><td>${esc(B(s.subeId).ad)}</td><td>${KAYNAK[s.kaynak]}</td><td class="r">${TL(s.odeme.matrah)}</td><td class="r">${TL(s.odeme.ofis)}</td><td class="r"><b>${TL(s.odeme.uzman)}</b></td><td>${s.kaynak==='firma'?'<span class="badge b-pasif">Firma</span>':odendiMi(s)?'<span class="badge b-odendi">Ödendi</span>':'<span class="badge b-bekliyor">Bekliyor</span>'}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="4">Toplam</td><td class="r">${TL(k.matrah)}</td><td class="r">${TL(k.ofis)}</td><td class="r">${TL(k.uzman)}</td><td></td></tr></tfoot></table></div>`:`<div class="empty"><b>${L} tamamlanan seans yok</b>Dönemi değiştirerek diğer tarihlere bakabilirsiniz.</div>`}`}
+  ${list.length?`<div class="tw"><table class="tbl"><thead><tr><th>Tarih</th><th>Danışan</th><th>Şube</th><th>Kaynak</th><th class="r">Matrah</th><th class="r">Ofis payı</th><th class="r">Hak ediş</th><th>Ödeme</th></tr></thead><tbody>${list.map(s=>`<tr><td class="num">${fmtD(s.tarih,{day:'numeric',month:'short'})} ${s.saat}</td><td>${esc(D(s.danisanId).ad)}</td><td>${esc(B(s.subeId).ad)}</td><td>${kayAd(s.kaynak)}</td><td class="r">${TL(s.odeme.matrah)}</td><td class="r">${TL(s.odeme.ofis)}</td><td class="r"><b>${TL(s.odeme.uzman)}</b></td><td>${s.kaynak==='firma'?'<span class="badge b-pasif">Firma</span>':odendiMi(s)?'<span class="badge b-odendi">Ödendi</span>':'<span class="badge b-bekliyor">Bekliyor</span>'}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="4">Toplam</td><td class="r">${TL(k.matrah)}</td><td class="r">${TL(k.ofis)}</td><td class="r">${TL(k.uzman)}</td><td></td></tr></tfoot></table></div>`:`<div class="empty"><b>${L} tamamlanan seans yok</b>Dönemi değiştirerek diğer tarihlere bakabilirsiniz.</div>`}`}
 function vMusaitlik(){const u=U(UI.uzmanId);UI.ms=u.subeIds.includes(UI.ms)?UI.ms:u.subeIds[0];const sb=B(UI.ms);const m=(u.musait[UI.ms]=u.musait[UI.ms]||{});
   const saatler=SAATLER.filter(h=>h>=sb.acilis&&h<sb.kapanis);
   return`<div class="page-head"><div><h1>Müsaitlik</h1><p>Asistanlar yalnızca işaretlediğiniz saatlere randevu verebilir.</p></div></div>
@@ -1338,8 +1348,8 @@ function seansDuz(id){const s=SE(id),d=D(s.danisanId),o=s.odeme;A._sid=id;
   const gec=(s.gecmis||[]).slice().reverse();
   sheet('Seansı düzenle',`<div class="secili"><div class="grow"><b>${esc(d.ad)}</b><span class="small muted">${fmtD(s.tarih)} ${s.saat} · ${esc(O(s.odaId).ad)}</span></div>${badge(s.durum)}</div>
   <div class="row2">${fld('Uzman',`<select id="sd_uz" data-chg="sdCalc">${uz.map(u=>`<option value="${u.id}" ${u.id===s.uzmanId?'selected':''}>${esc(u.ad)}${u.aktif?'':' (pasif)'}</option>`).join('')}</select>`)}
-  ${fld('Seans türü',`<select id="sd_tur">${TURLER.map(t=>`<option ${t===s.tur?'selected':''}>${t}</option>`).join('')}</select>`)}</div>
-  ${fld('Kaynak',`<select id="sd_kaynak" data-chg="sdKaynak">${Object.entries(KAYNAK).map(([k,l])=>`<option value="${k}" ${s.kaynak===k?'selected':''}>${l}</option>`).join('')}</select>`)}
+  ${fld('Seans türü',`<select id="sd_tur">${s.tur?'':'<option value="" selected>Belirtilmemiş</option>'}${TURLER.map(t=>`<option ${t===s.tur?'selected':''}>${t}</option>`).join('')}</select>`)}</div>
+  ${fld('Kaynak',`<select id="sd_kaynak" data-chg="sdKaynak">${s.kaynak?'':'<option value="" selected>Belirtilmemiş</option>'}${Object.entries(KAYNAK).map(([k,l])=>`<option value="${k}" ${s.kaynak===k?'selected':''}>${l}</option>`).join('')}</select>`)}
   <div id="sd_firmaBox" class="sub-box" ${s.kaynak==='firma'?'':'hidden'}>${fld('Firma',`<select id="sd_firma" data-chg="sdCalc"><option value="">Firma seçin</option>${S.firmalar.filter(f=>f.subeIds.includes(s.subeId)||f.id===s.firmaId).map(f=>`<option value="${f.id}" ${f.id===(s.firmaId||d.firmaId)?'selected':''}>${esc(f.ad)}</option>`).join('')}</select>`)}<span class="small muted">Firma danışanından ücret alınmaz. Danışanın kartındaki firma da bu seçime göre güncellenir.</span></div>
   ${fld(o?'Ücret (₺)':'Ücret (₺)',`<input id="sd_ucret" type="number" inputmode="decimal" min="0" value="${s.ucret}" data-in="sdCalc" ${s.kaynak==='firma'||o?'disabled':''}>`)}
   ${o&&s.kaynak!=='firma'?'<span class="small muted" style="margin-top:-8px">Ödenmiş seansta tutar aşağıdaki tahsilat bilgilerinden değiştirilir.</span>':''}
@@ -1359,7 +1369,7 @@ function sdHes(){return odemeHes('sd2')}
 /* ============ Danışan düzenleme ============ */
 function danisanDuz(id){const d=D(id);const p=x=>x||{ad:'',tel:''};const es=p(d.es),an=p(d.anne),ba=p(d.baba);
   sheet('Danışan bilgilerini düzenle',`${fld('Ad soyad',`<input id="dd_ad" value="${esc(d.ad)}">`)}
-  <div class="row2">${fld('Telefon',`<input id="dd_tel" type="tel" data-tel inputmode="numeric" placeholder="5XXXXXXXXX" autocomplete="off" value="${esc(d.tel||'')}">`)}${fld('Danışan türü',`<select id="dd_tur" data-chg="ddTur">${TURLER.map(t=>`<option ${t===d.tur?'selected':''}>${t}</option>`).join('')}</select>`)}</div>
+  <div class="row2">${fld('Telefon',`<input id="dd_tel" type="tel" data-tel inputmode="numeric" placeholder="5XXXXXXXXX" autocomplete="off" value="${esc(d.tel||'')}">`)}${fld('Danışan türü',`<select id="dd_tur" data-chg="ddTur">${d.tur?'':'<option value="" selected>Belirtilmemiş</option>'}${TURLER.map(t=>`<option ${t===d.tur?'selected':''}>${t}</option>`).join('')}</select>`)}</div>
   <label class="chk"><input type="checkbox" id="dd_sms" ${d.sms.ana?'checked':''}> Danışana SMS gönder</label>
   <div class="sub-box" id="dd_cift" ${d.tur==='Çift'?'':'hidden'}><span class="lbl">2. danışan (eş / partner)</span><div class="row2">${fld('Ad soyad',`<input id="dd_es_ad" value="${esc(es.ad)}">`)}${fld('Telefon',`<input id="dd_es_tel" type="tel" data-tel inputmode="numeric" placeholder="5XXXXXXXXX" autocomplete="off" value="${esc(es.tel)}">`)}</div><label class="chk"><input type="checkbox" id="dd_sms_es" ${d.sms.es?'checked':''}> Eşe / Partnere SMS gönder</label></div>
   <div class="sub-box" id="dd_coc" ${d.tur==='Çocuk'||d.tur==='Ergen'?'':'hidden'}><span class="lbl">Ebeveyn bilgileri</span>
@@ -1368,7 +1378,7 @@ function danisanDuz(id){const d=D(id);const p=x=>x||{ad:'',tel:''};const es=p(d.
   <div class="row2">${fld('Kayıtlı şube',`<select id="dd_sube">${S.subeler.map(b=>`<option value="${b.id}" ${b.id===d.subeId?'selected':''}>${esc(b.ad)}</option>`).join('')}</select>`)}
   ${fld('Kurumsal firma',`<select id="dd_firma"><option value="">Yok</option>${S.firmalar.map(f=>`<option value="${f.id}" ${f.id===d.firmaId?'selected':''}>${esc(f.ad)}</option>`).join('')}</select>`)}</div>
   <div class="row2">${fld('Kendi danışanı olduğu uzman',`<select id="dd_sahip"><option value="">Yok (ofis danışanı)</option>${S.uzmanlar.map(u=>`<option value="${u.id}" ${u.id===d.sahipUzmanId?'selected':''}>${esc(u.ad)}</option>`).join('')}</select>`)}
-  ${fld('Arşiv seans sayısı (2023–2025)',`<input id="dd_ars" type="number" min="0" value="${d.arsiv||0}">`)}</div>
+  ${fld('Arşiv seans sayısı',`<input id="dd_ars" type="number" min="0" value="${d.arsiv||0}">`)}</div>
   <span class="small muted">Kendi danışanı bilgisi yalnızca yeni randevularda varsayılan kaynağı belirler; geçmiş seansların komisyonu değişmez.</span>
   ${aktifRol()==='asistan'?`<div class="sub-box" style="margin-top:6px"><span class="lbl">Mükerrer kayıt</span><span class="small muted">Bu kişi için yanlışlıkla ikinci bir kayıt açıldıysa, o kaydın seanslarını buraya taşıyıp fazla kaydı silebilirsiniz.</span><div><button class="btn sm" data-act="birlesAc" data-id="${id}">${ic('users')}Başka bir kayıtla birleştir</button></div></div>`:''}`,
   `<button class="btn" data-act="danisanDetay" data-id="${id}">Vazgeç</button><button class="btn primary" data-act="danisanKaydet" data-id="${id}">Kaydet</button>`)}
@@ -1384,21 +1394,121 @@ function ayniNumara(tel,haricId){const tk=digits(tel).slice(-10);if(tk.length<10
 function dOzet(d){const l=S.seanslar.filter(s=>s.danisanId===d.id&&s.durum!=='iptal').sort((a,b)=>(a.tarih+a.saat).localeCompare(b.tarih+b.saat));
   return{d,adet:l.length,son:l.length?l[l.length-1]:null}}
 function birlesKart(o,baslik,renk){const d=o.d;return`<div class="ccard" style="border-color:${renk};gap:4px"><small style="color:${renk}">${baslik}</small><b style="font-size:1rem">${esc(d.ad)}</b>
-  <span class="small">${esc(d.tel||'—')}</span><span class="small muted">${d.tur} · ${esc(B(d.subeId).ad)}${d.firmaId?' · '+esc(F(d.firmaId).ad):''}</span>
+  <span class="small">${esc(d.tel||'—')}</span><span class="small muted">${d.tur?d.tur+' · ':''}${esc(B(d.subeId).ad)}${d.firmaId?' · '+esc(F(d.firmaId).ad):''}</span>
   <span class="small">Arşiv ${d.arsiv||0} + güncel ${o.adet} = <b>${(d.arsiv||0)+o.adet} seans</b></span>
   <span class="small muted">Son seans: ${o.son?fmtD(o.son.tarih,{day:'numeric',month:'short',year:'numeric'})+' · '+esc(U(o.son.uzmanId).ad):'yok'}</span>
   ${d.anne?`<span class="small muted">Anne: ${esc(d.anne.ad)}</span>`:''}${d.baba?`<span class="small muted">Baba: ${esc(d.baba.ad)}</span>`:''}${d.es?`<span class="small muted">Eş: ${esc(d.es.ad)}</span>`:''}</div>`}
+
+/* ============ Veri aktarımı (eski sistem CSV) ============ */
+function csvParse(t){const rows=[];let row=[],f='',q=false;for(let i=0;i<t.length;i++){const c=t[i];
+  if(q){if(c==='"'){if(t[i+1]==='"'){f+='"';i++}else q=false}else f+=c}
+  else if(c==='"'&&f==='')q=true;else if(c===';'){row.push(f);f=''}else if(c==='\n'){row.push(f);rows.push(row);row=[];f=''}else if(c!=='\r')f+=c}
+  if(f||row.length){row.push(f);rows.push(row)}return rows}
+const tarihCevir=t=>{const m=String(t||'').trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);return m?`${m[3]}-${pad(m[2])}-${pad(m[1])}`:''};
+const saatCevir=t=>{const m=String(t||'').match(/(\d{1,2}):(\d{2})/);return m?pad(m[1])+':'+m[2]:''};
+const sayi=v=>{const n=parseFloat(String(v||'').replace(',','.'));return isFinite(n)?n:null};
+const isimDuzelt=t=>String(t||'').replace(/\s+/g,' ').trim();
+function odaTurTahmin(ad){const a=low(ad);if(/çocuk|cocuk|kum|oyun/.test(a))return'Çocuk/Oyun Odası';if(/çift|cift/.test(a))return'Çift Odası';if(/skype/.test(a))return'Skype Odası';if(/online|çevrim|cevrim/.test(a))return'Online Oda';return'Yetişkin Odası'}
+function aktarimHazirla(text){
+  const rows=csvParse(text.replace(/^﻿/,'')).filter(r=>r.length>1);if(rows.length<2)throw new Error('Dosyada kayıt bulunamadı.');
+  const H=rows[0].map(h=>h.trim());const gerek=['randevu_uuid','randevu_tarihi','randevu_saati','lokasyon_uuid','T_Lokasyon','psk_uuid','T_SecilenPsk','oda_uuid','T_SecilenOda','danisan_uuid','danisan_name','isIptal'];
+  const eksik=gerek.filter(g=>!H.includes(g));if(eksik.length)throw new Error('Bu dosya beklenen randevu dışa aktarımı değil. Eksik sütunlar: '+eksik.join(', '));
+  const R=rows.slice(1).map(r=>{const o={};H.forEach((h,i)=>o[h]=(r[i]||'').trim());return o}).filter(o=>o.randevu_uuid);
+  R.forEach(o=>{o._t=tarihCevir(o.randevu_tarihi);o._h=saatCevir(o.randevu_saati)});
+  const hatali=R.filter(o=>!o._t||!o._h).length;const K=R.filter(o=>o._t&&o._h).sort((a,b)=>(a._t+a._h).localeCompare(b._t+b._h));
+  const simdi=nowH();
+  // şubeler
+  const subeMap=new Map();K.forEach(o=>{if(!subeMap.has(o.lokasyon_uuid))subeMap.set(o.lokasyon_uuid,{ad:(o.T_Lokasyon.match(/\(([^)]+)\)/)||[0,o.T_Lokasyon])[1].trim()||'Şube',saatler:new Set()});subeMap.get(o.lokasyon_uuid).saatler.add(o._h)});
+  const subeler=[];let ai=0;subeMap.forEach((v,k)=>{const es=S.subeler.find(b=>low(b.ad)===low(v.ad));const sa=[...v.saatler].sort();ai++;
+    const kap=pad(Math.min(24,parseInt(sa[sa.length-1])+1))+':00';
+    subeler.push({id:'b'+k.slice(0,8),_k:k,ad:v.ad,adres:es?es.adres:'',harita:es?es.harita:'',tel:es?es.tel:'',acilis:es&&es.acilis<sa[0]?es.acilis:sa[0],kapanis:es&&es.kapanis>kap?es.kapanis:kap,
+      asistan:es&&es.asistan?{...es.asistan}:{email:`asistan${ai}@asistpsikolog.com`,sifre:'demo1234'}})});
+  const subeId=new Map(subeler.map(b=>[b._k,b.id]));subeler.forEach(b=>delete b._k);
+  // odalar
+  const odaMap=new Map();K.forEach(o=>{if(!odaMap.has(o.oda_uuid))odaMap.set(o.oda_uuid,{id:'r'+o.oda_uuid.slice(0,8),subeId:subeId.get(o.lokasyon_uuid),ad:isimDuzelt(o.T_SecilenOda)||'Oda',tur:odaTurTahmin(o.T_SecilenOda)})});
+  const odalar=[...odaMap.values()];
+  // uzmanlar (aynı isimli kayıtlar birleştirilir)
+  const uzAd=new Map(),uzUuid=new Map(),birlesen=new Set();
+  K.forEach(o=>{const ad=isimDuzelt(o.T_SecilenPsk)||'İsimsiz uzman';const key=low(ad);
+    if(!uzAd.has(key))uzAd.set(key,{id:'u'+o.psk_uuid.slice(0,8),ad,uuids:new Set(),subeIds:new Set(),son:'',yuzde:50,tel:'',sms:true});
+    const u=uzAd.get(key);u.uuids.add(o.psk_uuid);u.subeIds.add(subeId.get(o.lokasyon_uuid));u.son=o._t;const y=sayi(o.psk_default_yuzde);if(y!=null)u.yuzde=y;if(o.psk_contac)u.tel=normTel(o.psk_contac);u.sms=o.psk_sms_service!=='0'});
+  const uuidAd=new Map();K.forEach(o=>{const a=isimDuzelt(o.T_SecilenPsk);if(!uuidAd.has(o.psk_uuid))uuidAd.set(o.psk_uuid,new Set());uuidAd.get(o.psk_uuid).add(low(a))});
+  uzAd.forEach(u=>{if(u.uuids.size>1)birlesen.add(u.ad);u.uuids.forEach(x=>uzUuid.set(x,u.id))});
+  const sinir=addDays(TODAY,-180);
+  const uzmanlar=[...uzAd.values()].map(u=>{const musait={};[...u.subeIds].forEach(sid=>{const b=subeler.find(x=>x.id===sid);musait[sid]={};for(let g=1;g<=6;g++)musait[sid][g]=SAATLER.filter(h=>h>=b.acilis&&h<b.kapanis)});
+    return{id:u.id,ad:u.ad,tel:u.tel,email:'',sifre:'',alanlar:[...TURLER],subeIds:[...u.subeIds],oranKendi:u.yuzde,oranYonlendirme:u.yuzde,telGor:true,sms:u.sms,aktif:u.son>=sinir,musait,izinler:[]}});
+  // danışanlar
+  const dMap=new Map();K.forEach(o=>{if(!dMap.has(o.danisan_uuid))dMap.set(o.danisan_uuid,[]);dMap.get(o.danisan_uuid).push(o)});
+  let telHatali=0;
+  const danisanlar=[...dMap.entries()].map(([k,l])=>{const son=l[l.length-1];const sube={};l.forEach(o=>sube[o.lokasyon_uuid]=(sube[o.lokasyon_uuid]||0)+1);
+    const sb=Object.entries(sube).sort((a,b)=>b[1]-a[1])[0][0];const tel=normTel(son.danisan_contac);if(!telOk(tel))telHatali++;
+    const vr=[...l].reverse().find(o=>o.isParent==='1'&&o.parentName&&low(isimDuzelt(o.parentName))!==low(isimDuzelt(son.danisan_name)));const sonGeldi=[...l].reverse().find(o=>o.isIptal!=='1')||son;
+    return{id:'d'+k.slice(0,12),ad:isimDuzelt(son.danisan_name)||'İsimsiz danışan',tel,subeId:subeId.get(sb),tur:'',es:null,anne:null,baba:null,
+      veli:vr?{ad:isimDuzelt(vr.parentName),tel:normTel(vr.parentPhone.replace(/\.0$/,''))}:null,
+      sms:{ana:son.isDanisanSms!=='0',es:false,anne:false,baba:false,veli:son.parentSms==='1'},firmaId:null,arsiv:0,
+      takipUzman:uzUuid.get(sonGeldi.psk_uuid),sahipUzmanId:null,kayit:tarihCevir(l[0].createdAt)||l[0]._t}});
+  const dId=new Map([...dMap.keys()].map(k=>[k,'d'+k.slice(0,12)]));
+  // seanslar
+  const ust={Nakit:0,'Havale/EFT':0};let gecmisOdemesiz=0;
+  const seanslar=K.map(o=>{const iptal=o.isIptal==='1';const gecti=o._t<TODAY||(o._t===TODAY&&parseInt(o._h)<=simdi);
+    const al=sayi(o.p_AlinanOdeme);const oran=sayi(o.p_OfisPayi)??sayi(o.psk_default_yuzde)??50;
+    const s={id:'i'+o.randevu_uuid.slice(0,13),danisanId:dId.get(o.danisan_uuid),uzmanId:uzUuid.get(o.psk_uuid),subeId:subeId.get(o.lokasyon_uuid),odaId:'r'+o.oda_uuid.slice(0,8),
+      tarih:o._t,saat:o._h,tur:'',kaynak:'',firmaId:null,ucret:al??0,durum:iptal?'iptal':gecti?'odendi':'bekliyor',odeme:null,sadeceEbeveyn:false,not:o.asist_note||'',aktarim:1};
+    if(iptal&&o.iptalSebebi)s.not=(s.not?s.not+' · ':'')+'İptal: '+o.iptalSebebi;
+    if(!iptal&&gecti){const t=al??0;if(al==null)gecmisOdemesiz++;const of=sayi(o.p_OfiseKalan),ps=sayi(o.p_PsikologKalan);
+      const ofis=of!=null&&ps!=null?of:t*oran/100,uz=of!=null&&ps!=null?ps:t-ofis;const kanal=o.p_OdemeKimde==='nakit'?'Nakit':o.p_OdemeKimde==='bank'?'Havale/EFT':'';
+      s.odeme={tahsilat:t,kdv:0,matrah:t,ofis,uzman:uz,kdvOran:0,oran,kanal,tarih:o._t};if(ust[kanal]!=null)ust[kanal]+=t}
+    if(!gecti&&!iptal&&!(al>0))s.ucret=S.fiyat['Yetişkin'];
+    return s});
+  // önceki ayların uzman hak edişleri ödenmiş kabul edilir; içinde bulunulan ay açık kalır
+  const buAy=TODAY.slice(0,7),hs={};seanslar.forEach(x=>{if(x.odeme&&x.tarih.slice(0,7)<buAy){const k=x.uzmanId+'|'+x.subeId+'|'+x.tarih.slice(0,7);hs[k]=(hs[k]||0)+x.odeme.uzman}});
+  const uzmanOdemeleri=Object.entries(hs).map(([k,v],i)=>{const[u,sb,ay]=k.split('|');return{id:'oa'+i,uzmanId:u,subeId:sb,ay,tutar:v,tarih:ay+'-28',aktarim:1}});
+  const ozet={satir:R.length,hatali,seans:seanslar.length,iptal:seanslar.filter(x=>x.durum==='iptal').length,odendi:seanslar.filter(x=>x.durum==='odendi').length,bekliyor:seanslar.filter(x=>x.durum==='bekliyor').length,
+    danisan:danisanlar.length,telHatali,uzman:uzmanlar.length,aktifUzman:uzmanlar.filter(u=>u.aktif).length,birlesen:[...birlesen],sube:subeler.map(b=>b.ad),oda:odalar.length,
+    ilk:K.length?K[0]._t:'',son:K.length?K[K.length-1]._t:'',ciro:seanslar.reduce((a,x)=>a+(x.odeme?x.odeme.tahsilat:0),0),gecmisOdemesiz};
+  return{veri:{subeler,odalar,uzmanlar,danisanlar,seanslar,uzmanOdemeleri},ozet}}
+function vAktar(){const A_=UI.aktarim;const o=A_&&A_.ozet;
+  return`<div class="page-head"><div><h1>Veri Aktarımı</h1><p>Eski sistemden dışa aktarılan randevu dosyasını (CSV) yükleyin.</p></div></div>
+  <div class="cmsg" style="background:var(--surface);border:1px solid var(--line);color:var(--ink);font-weight:500"><span>${ic('shield')} <b>Veriler yalnızca bu cihazda kalır.</b> Dosya tarayıcınızın içinde okunur ve bu tarayıcının deposunda saklanır; hiçbir sunucuya, GitHub'a ya da başka bir yere gönderilmez. Başka bir bilgisayarda görmek için dosyayı orada da yüklemeniz gerekir.</span></div>
+  <div class="card"><h2>1. Dosyayı seçin</h2>
+    <label class="btn" style="align-self:flex-start;cursor:pointer">${ic('dl')}CSV dosyası seç<input type="file" id="aktarDosya" accept=".csv,text/csv" data-chg="aktarSec" style="position:absolute;opacity:0;width:1px;height:1px"></label>
+    <span class="small muted" id="aktarDurum">${A_&&A_.ad?esc(A_.ad)+' · '+(A_.boyut/1048576).toFixed(1)+' MB':'Henüz dosya seçilmedi.'}</span></div>
+  ${A_&&A_.hata?`<div class="cmsg err"><span>${esc(A_.hata)}</span></div>`:''}
+  ${o?`<div class="card"><h2>2. Ön izleme</h2>
+    <div class="stats"><div class="stat"><span class="k">Randevu</span><span class="v">${o.seans.toLocaleString('tr-TR')}</span><span class="d">${fmtD(o.ilk,{day:'numeric',month:'short',year:'numeric'})} – ${fmtD(o.son,{day:'numeric',month:'short',year:'numeric'})}</span></div>
+    <div class="stat"><span class="k">Danışan</span><span class="v">${o.danisan.toLocaleString('tr-TR')}</span>${o.telHatali?`<span class="d" style="color:var(--warn)">${o.telHatali} telefon geçersiz, kartından düzeltilebilir</span>`:''}</div>
+    <div class="stat"><span class="k">Psikolog</span><span class="v">${o.uzman}</span><span class="d">${o.aktifUzman} aktif · son 6 ayda seansı olmayanlar pasif</span></div>
+    <div class="stat"><span class="k">Toplam tahsilat</span><span class="v">${TL(o.ciro)}</span><span class="d">${o.odendi.toLocaleString('tr-TR')} ödendi · ${o.iptal.toLocaleString('tr-TR')} iptal · ${o.bekliyor} bekleyen</span></div></div>
+    <dl class="kv"><dt>Şubeler</dt><dd>${o.sube.map(esc).join(', ')} · ${o.oda} oda</dd>
+    ${o.birlesen.length?`<dt>Birleştirilen</dt><dd>${o.birlesen.map(esc).join(', ')} (birden fazla kaydı vardı, tek uzman yapıldı)</dd>`:''}
+    ${o.hatali?`<dt>Atlanan</dt><dd>${o.hatali} satırın tarihi/saati okunamadı</dd>`:''}</dl>
+    <div class="small muted" style="display:flex;flex-direction:column;gap:4px"><span>• Geçmiş ve iptal edilmemiş tüm seanslar <b>ödendi</b> olarak, eski sistemdeki tutar ve ofis payıyla aktarılır${o.gecmisOdemesiz?` (tutarı girilmemiş ${o.gecmisOdemesiz.toLocaleString('tr-TR')} seans ₺0 olarak)`:''}.</span><span>• Seans türü ve kaynak boş bırakılır; bu danışanlara yeni randevu açılırken seçilir.</span><span>• Önceki ayların uzman hak edişleri ödenmiş sayılır; bu ayınki Şube Kasası'ndan işaretlenir.</span><span>• İptaller iptal olarak kalır, iptal sebebi seans notuna yazılır.</span><span>• Psikologların e-posta ve şifresi yoktur; giriş yapabilmeleri için Uzmanlar sayfasından tanımlanmalıdır.</span></div></div>
+  <div class="card"><h2>3. İçe aktarın</h2><span class="small">Bu işlem bu tarayıcıdaki <b>tüm mevcut kayıtları</b> (demo danışanlar, seanslar, uzmanlar, şubeler, giderler ve kurumsal firmalar) silip yerine dosyadaki verileri koyar. Fiyatlar, KDV oranı, SMS ayarları ve yönetici hesabınız korunur.</span>
+    <div><button class="btn danger" data-act="aktarUygula">Mevcut verileri sil ve içe aktar</button></div></div>`:''}
+  ${S.kaynakDosya?`<div class="small muted">Son aktarım: ${esc(S.kaynakDosya)}</div>`:''}`}
+
 /* ============ Görünüm tablosu ============ */
 function ySubeSec(){UI.ySube=S.subeler.some(b=>b.id===UI.ySube)?UI.ySube:S.subeler[0].id;UI.subeId=UI.ySube;
   return`<div class="toolbar"><span class="lbl">Şube</span><div class="seg">${S.subeler.map(b=>`<button class="${b.id===UI.ySube?'on':''}" data-act="ySube" data-v="${b.id}">${esc(b.ad)}</button>`).join('')}</div></div>`}
 const VIEWS={gorusmeler:vGorusmeler,takvim:vTakvim,randevu:()=>vRandevu('asistan'),danisanlar:vDanisanlar,kasa:vKasa,giderler:vGiderler,sms:vSms,firma:vFirma,
-  ozet:vOzet,ykasa:()=>ySubeSec()+vKasa(),ygider:()=>ySubeSec()+vGiderler(),subeler:vSubeler,uzmanlar:vUzmanlar,fiyat:vFiyat,firmalar:vFirmalar,smsayar:vSmsAyar,
+  ozet:vOzet,aktar:vAktar,ykasa:()=>ySubeSec()+vKasa(),ygider:()=>ySubeSec()+vGiderler(),subeler:vSubeler,uzmanlar:vUzmanlar,fiyat:vFiyat,firmalar:vFirmalar,smsayar:vSmsAyar,
   ajanda:vAjanda,danisanlarim:vDanisanlarim,kendi:()=>vRandevu('psikolog'),hakedis:vHakedis,musaitlik:vMusaitlik};
 const AFTER={randevu:rInit,kendi:rInit};
 
 /* ============ Aksiyonlar ============ */
 const A={
   kapat,
+  aktarSec(d,el){const f=el.files&&el.files[0];if(!f)return;UI.aktarim={ad:f.name,boyut:f.size};$('#aktarDurum').textContent='Okunuyor…';
+    const r=new FileReader();r.onload=()=>{try{const x=aktarimHazirla(String(r.result));UI.aktarim={ad:f.name,boyut:f.size,...x}}catch(e){UI.aktarim={ad:f.name,boyut:f.size,hata:e.message}}render()};
+    r.onerror=()=>{UI.aktarim={ad:f.name,boyut:f.size,hata:'Dosya okunamadı.'};render()};r.readAsText(f,'utf-8')},
+  aktarUygula(d,el){if(!el.classList.contains('sure')){el.classList.add('sure');el.textContent='Emin misiniz? Bu işlem geri alınamaz';return}
+    const v=UI.aktarim&&UI.aktarim.veri;if(!v)return;
+    S={v:S.v,...v,masraflar:[],firmalar:[],fiyat:S.fiyat,ayar:S.ayar,netgsm:S.netgsm,sablon:S.sablon,smsLog:[],kaynakDosya:`${UI.aktarim.ad} · ${new Date().toLocaleString('tr-TR')}`};
+    const oz=UI.aktarim.ozet;UI.aktarim=null;UI.subeId=S.subeler[0].id;UI.uzmanId=(S.uzmanlar.find(u=>u.aktif)||S.uzmanlar[0]).id;UI.ySube=null;UI.dq='';UI.dp=0;
+    commit();toast(`${oz.seans.toLocaleString('tr-TR')} randevu ve ${oz.danisan.toLocaleString('tr-TR')} danışan aktarıldı.`);
+    sheet('Aktarım tamamlandı',`<p style="margin:0">Asistanlar aşağıdaki e-postalarla giriş yapabilir. Şifreleri Şubeler sayfasından değiştirmenizi öneririm.</p><div class="hist">${S.subeler.map(b=>`<div><b class="small">${esc(b.ad)}</b><span class="small">${esc(b.asistan.email)}</span><span class="small muted">${b.asistan.sifre==='demo1234'?'şifre: demo1234':'mevcut şifre'}</span></div>`).join('')}</div>
+      <p class="small muted" style="margin:0">Psikologların giriş yapabilmesi için Uzmanlar sayfasından her birine e-posta ve şifre tanımlayın.</p>`,`<button class="btn primary" data-act="kapat">Tamam</button>`)},
+
   ySube(d){UI.ySube=d.v;render()},
   kaynakDegis(){formYenile();const d=val('r_did')?D(val('r_did')):null;if(rKaynak()==='firma'&&!val('r_firma')&&d&&d.firmaId&&[...$('#r_firma').options].some(o=>o.value===d.firmaId)){$('#r_firma').value=d.firmaId;formYenile()}},
   
@@ -1406,7 +1516,7 @@ const A={
     toast('Firma seansı tamamlandı.')},
   sdKaynak(){const s=SE(A._sid);const k=val('sd_kaynak');const uc=$('#sd_ucret');$('#sd_firmaBox').hidden=k!=='firma';
     if(k==='firma'){uc.value=0;uc.disabled=true}
-    else{uc.disabled=false;if(+uc.value===0)uc.value=S.fiyat[val('sd_tur')]}
+    else{uc.disabled=false;if(+uc.value===0)uc.value=S.fiyat[val('sd_tur')]||S.fiyat['Yetişkin']}
     A.sdCalc()},
 
   birlesAc(d){const k=D(d.id);A._bk=d.id;
@@ -1417,7 +1527,7 @@ const A={
     const q=k.ad.split(' ')[0];$('#bq').value=q;A.birlesAra(null,$('#bq'))},
   birlesAra(d,el){const q=el.value.trim();const box=$('#bRes');if(q.length<2){box.innerHTML='<span class="small muted">En az 2 harf yazın.</span>';return}
     const l=dFiltre(sorted(),q).filter(x=>x.id!==A._bk).slice(0,8);
-    box.innerHTML=l.length?`<div class="dl">${l.map(x=>`<button class="row t-${TK[x.tur]}" data-act="birlesSec" data-id="${x.id}"><span class="av">${ini(x.ad)}</span><span style="min-width:0"><span class="nm">${hl(x.ad,q)}</span><span class="mt">${esc(x.tel)} · ${x.tur} · ${esc(B(x.subeId).ad)}</span></span><span class="cnt">${toplamSeans(x)}<small>seans</small></span></button>`).join('')}</div>`:'<span class="small muted">Eşleşen kayıt yok.</span>'},
+    box.innerHTML=l.length?`<div class="dl">${l.map(x=>`<button class="row t-${TK[x.tur]}" data-act="birlesSec" data-id="${x.id}"><span class="av">${ini(x.ad)}</span><span style="min-width:0"><span class="nm">${hl(x.ad,q)}</span><span class="mt">${esc(x.tel)} · ${x.tur?x.tur+' · ':''}${esc(B(x.subeId).ad)}</span></span><span class="cnt">${toplamSeans(x)}<small>seans</small></span></button>`).join('')}</div>`:'<span class="small muted">Eşleşen kayıt yok.</span>'},
   birlesSec(d){const k=dOzet(D(A._bk)),x=dOzet(D(d.id));A._bs=d.id;
     const cak=S.seanslar.filter(s=>s.danisanId===x.d.id&&s.durum!=='iptal').filter(s=>S.seanslar.some(t=>t.danisanId===k.d.id&&t.durum!=='iptal'&&t.tarih===s.tarih&&t.saat===s.saat));
     const adFarkli=low(k.d.ad)!==low(x.d.ad);
@@ -1440,14 +1550,14 @@ const A={
   telKontrol(d,el){const box=$('#r_telInfo');if(val('r_did')){box.hidden=true;return}const l=ayniNumara(el.value);
     if(!l.length){box.hidden=true;return}box.hidden=false;
     box.innerHTML=`<div class="oneri" style="flex-direction:column;align-items:stretch;gap:6px"><span>${ic('users')} Bu numara ${l.length} kayıtta kullanılıyor. Aynı kişiyse kaydı seçin; aynı aileden farklı biriyse (ör. kardeş) yeni kayıt olarak devam edin.</span>
-    ${l.slice(0,5).map(x=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span><b>${esc(x.d.ad)}</b> <span class="small muted">${x.d.tur} · numara ${x.rol} olarak kayıtlı · ${toplamSeans(x.d)} seans</span></span><button type="button" class="btn sm" data-act="acSec" data-id="${x.d.id}">Bu kişi</button></div>`).join('')}</div>`},
+    ${l.slice(0,5).map(x=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span><b>${esc(x.d.ad)}</b> <span class="small muted">${x.d.tur?x.d.tur+' · ':''}numara ${x.rol} olarak kayıtlı · ${toplamSeans(x.d)} seans</span></span><button type="button" class="btn sm" data-act="acSec" data-id="${x.d.id}">Bu kişi</button></div>`).join('')}</div>`},
   uzPasif(d){const u=U(d.id);
     if(!u.aktif){u.aktif=true;kapat();commit();toast(`${u.ad} yeniden aktif.`);return}
     const ak=S.seanslar.filter(s=>s.uzmanId===u.id&&s.durum==='bekliyor'&&!gecti(s)).sort((a,b)=>(a.tarih+a.saat).localeCompare(b.tarih+b.saat));
     const od=S.seanslar.filter(s=>s.uzmanId===u.id&&s.durum==='bekliyor'&&gecti(s)).length;
     if(ak.length){A._pasifUz=u.id;
       sheet('Uzman pasife alınamaz',`<div class="cmsg err"><span>${esc(u.ad)} adına ${ak.length} aktif (ileri tarihli) seans bulunduğu için pasife alınamaz. Önce bu seansları başka bir uzmana aktarın veya iptal edin.</span></div>
-      <div class="hist">${ak.map(s=>`<div><b class="small">${fmtD(s.tarih,{day:'numeric',month:'short'})} ${s.saat}</b><span class="small">${esc(D(s.danisanId).ad)} · ${esc(B(s.subeId).ad)} · ${s.tur}</span><span style="display:flex;gap:4px"><button class="btn sm" data-act="seansDuz" data-id="${s.id}">Uzman değiştir</button><button class="btn sm ghost" data-act="iptalSor" data-id="${s.id}">İptal</button></span></div>`).join('')}</div>
+      <div class="hist">${ak.map(s=>`<div><b class="small">${fmtD(s.tarih,{day:'numeric',month:'short'})} ${s.saat}</b><span class="small">${esc(D(s.danisanId).ad)} · ${esc(B(s.subeId).ad)}${s.tur?' · '+s.tur:''}</span><span style="display:flex;gap:4px"><button class="btn sm" data-act="seansDuz" data-id="${s.id}">Uzman değiştir</button><button class="btn sm ghost" data-act="iptalSor" data-id="${s.id}">İptal</button></span></div>`).join('')}</div>
       ${od?`<div class="small" style="color:var(--warn)">Ayrıca tahsilatı girilmemiş ${od} geçmiş seansı var; pasife almadan önce kapatılması önerilir.</div>`:''}`,
       `<button class="btn" data-act="uzDuz" data-id="${u.id}">Uzman kartına dön</button>`);return}
     u.aktif=false;kapat();commit();toast(`${u.ad} pasife alındı. Geçmiş seans ve muhasebe kayıtları korunuyor.${od?` ${od} seansın tahsilatı hâlâ bekliyor.`:''}`)},
@@ -1467,9 +1577,9 @@ const A={
     if(s.odeme&&$('#sd2_oran')&&!(+val('sd2_oran')>=0&&+val('sd2_oran')<=100)){toast('Ofis payı 0 ile 100 arasında olmalı.',1);return}
     const deg=[];const eski={uz:s.uzmanId,uc:s.ucret,k:s.kaynak,t:s.tur,f:s.firmaId,o:s.odeme&&{...s.odeme}};
     s.uzmanId=val('sd_uz');s.tur=val('sd_tur');s.kaynak=val('sd_kaynak');s.firmaId=s.kaynak==='firma'?val('sd_firma'):null;if(s.firmaId)dd.firmaId=s.firmaId;if((eski.f||'')!==(s.firmaId||'')&&s.firmaId&&eski.k==='firma')deg.push(`firma ${(F(eski.f)||{}).ad||'-'} → ${F(s.firmaId).ad}`);s.ucret=uc;s.not=val('sd_not');if($('#sd_eb'))s.sadeceEbeveyn=chk('sd_eb');
-    if(eski.uz!==s.uzmanId)deg.push(`uzman ${U(eski.uz).ad} → ${U(s.uzmanId).ad}`);if(eski.k!==s.kaynak)deg.push(`kaynak ${KAYNAK[eski.k]} → ${KAYNAK[s.kaynak]}`);if(eski.t!==s.tur)deg.push(`tür ${eski.t} → ${s.tur}`);
+    if(eski.uz!==s.uzmanId)deg.push(`uzman ${U(eski.uz).ad} → ${U(s.uzmanId).ad}`);if(eski.k!==s.kaynak)deg.push(`kaynak ${kayAd(eski.k)} → ${kayAd(s.kaynak)}`);if(eski.t!==s.tur)deg.push(`tür ${eski.t} → ${s.tur}`);
     if(s.odeme&&s.kaynak==='firma'){s.odeme=SIFIR(val('sd_ot')||s.odeme.tarih)}
-    else if(s.odeme){const c=sdHes();const kanal=document.querySelector('input[name="sd2_kanal"]:checked').value;
+    else if(s.odeme){const c=sdHes();const kanal=(document.querySelector('input[name="sd2_kanal"]:checked')||{}).value||s.odeme.kanal||'';
       s.odeme={...c,kanal,tarih:val('sd_ot')||s.odeme.tarih};s.ucret=+val('sd2_brut');if(c.oran!==eski.o.oran)deg.push(`ofis payı %${eski.o.oran??'-'} → %${c.oran}`);
       if(Math.abs(c.tahsilat-eski.o.tahsilat)>=1)deg.push(`tahsilat ${TL(eski.o.tahsilat)} → ${TL(c.tahsilat)}`);if(kanal!==eski.o.kanal)deg.push(`kanal ${eski.o.kanal} → ${kanal}`);if(c.kdvOran!==eski.o.kdvOran)deg.push(c.kdvOran?"KDV'siz → KDV'li":"KDV'li → KDV'siz")}
     else if(eski.uc!==uc)deg.push(`ücret ${TL(eski.uc)} → ${TL(uc)}`);
@@ -1552,7 +1662,7 @@ const A={
   tkShift(d){UI.tk=addDays(UI.tk||TODAY,+d.v);render()},tkToday(){UI.tk=TODAY;render()},tkTarih(d,el){if(el.value){UI.tk=el.value;render()}},
   acAra(d,el){const q=el.value.trim();const box=$('#acList');if(q.length<2){box.hidden=true;return}
     let pool=RS.mode==='psikolog'?benimDanisanlar():sorted();const res=dFiltre(pool,q).slice(0,8);
-    box.innerHTML=res.map(x=>`<button type="button" data-act="acSec" data-id="${x.id}"><span><b>${hl(x.ad,q)}</b><span class="small muted" style="display:block">${esc(x.tel)} · ${x.tur} · ${esc(B(x.subeId).ad)}</span></span><span class="small muted num">${toplamSeans(x)} seans</span></button>`).join('')+`<button type="button" class="new" data-act="acYeni">+ “${esc(q)}” adıyla yeni danışan</button>`;box.hidden=false},
+    box.innerHTML=res.map(x=>`<button type="button" data-act="acSec" data-id="${x.id}"><span><b>${hl(x.ad,q)}</b><span class="small muted" style="display:block">${esc(x.tel)} · ${x.tur?x.tur+' · ':''}${esc(B(x.subeId).ad)}</span></span><span class="small muted num">${toplamSeans(x)} seans</span></button>`).join('')+`<button type="button" class="new" data-act="acYeni">+ “${esc(q)}” adıyla yeni danışan</button>`;box.hidden=false},
   acSec(d){const l=$('#acList');if(l)l.hidden=true;const t=$('#r_telInfo');if(t)t.hidden=true;acSecId(d.id)},
   acYeni(){const q=val('r_ara');$('#acList').hidden=true;if(/\d{4,}/.test(q)){$('#r_tel').value=normTel(q);telDurum($('#r_tel'))}else $('#r_ad').value=q;$('#r_ad').focus()},
   acTemizle(){$('#r_did').value='';$('#r_secili').hidden=true;$('#acWrap').hidden=false;RS.oneri=null;$('#r_oneri').innerHTML='';['r_ad','r_tel','r_es_ad','r_es_tel','r_anne_ad','r_anne_tel','r_baba_ad','r_baba_tel','r_ara'].forEach(i=>$('#'+i).value='');$('#r_ara').focus()},
@@ -1649,9 +1759,9 @@ const A={
   uzKaydet(d){const ad=val('u_ad');const alanlar=$$('input[name="u_alan"]:checked').map(x=>x.value),subeIds=$$('input[name="u_sube"]:checked').map(x=>x.value);
     if(!ad||!alanlar.length||!subeIds.length){toast('Ad, en az bir alan ve bir şube seçin.',1);return}
     {const h=telHata([['u_tel','Uzman telefonu',true]]);if(h){toast(h,1);return}}
-    {const em=val('u_email');if(!EPOSTA_RE.test(em)){toast('Giriş için geçerli bir e-posta girin.',1);return}
+    {const em=val('u_email');if(em||val('u_sifre')){if(!EPOSTA_RE.test(em)){toast('Giriş için geçerli bir e-posta girin.',1);return}
      const c=kullaniciCakisma(em,d.id?U(d.id):null,'psikolog');if(c){toast(`Bu e-posta ${c} kullanılıyor.`,1);return}
-     if(val('u_sifre').length<6){toast('Giriş şifresi en az 6 karakter olmalı.',1);return}}
+     if(val('u_sifre').length<6){toast('Giriş şifresi en az 6 karakter olmalı.',1);return}}}
     const x={ad,tel:val('u_tel'),email:val('u_email'),sifre:val('u_sifre'),alanlar,subeIds,oranKendi:Math.min(100,Math.max(0,+val('u_ok'))),oranYonlendirme:Math.min(100,Math.max(0,+val('u_oy'))),telGor:chk('u_telgor'),sms:chk('u_sms')};
     if(d.id){const u=U(d.id);Object.assign(u,x);subeIds.forEach(s=>u.musait[s]=u.musait[s]||{})}
     else{const musait={};subeIds.forEach(s=>{musait[s]={};for(let g=1;g<=6;g++)musait[s][g]=subeIds.length===1||((g%2?subeIds[0]:subeIds[1])===s)?SAATLER.filter(h=>h>='10:00'&&h<'21:00'):[]});S.uzmanlar.push({id:uid('u'),aktif:true,musait,izinler:[],...x})}
@@ -1689,7 +1799,9 @@ document.addEventListener('submit',e=>{e.preventDefault();const f=A[e.target.dat
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('#modal').innerHTML)kapat()});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&ds(new Date())!==TODAY){TODAY=ds(new Date());UI.per.ref=TODAY;render()}});
 setInterval(()=>{if(ds(new Date())!==TODAY){TODAY=ds(new Date());render()}},60000);
-render();
+let _ilk=false;const ilkCiz=()=>{if(_ilk)return;_ilk=true;_hazir=true;render()};
+IDB.get(KEY).then(x=>{if(x&&x.v){S=x;migrate();idx()}ilkCiz();save()}).catch(()=>{ilkCiz();save()});
+setTimeout(ilkCiz,2500);
 </script>
 
 </body>
