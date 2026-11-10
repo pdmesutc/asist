@@ -319,6 +319,30 @@ table.cal{border-collapse:separate;border-spacing:0;min-width:100%}
 .cell.full b{font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
 .cell.full small{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
 .cell.full.paid b::after{content:" ✓";color:var(--ok)}
+.cell.full.unpaid{position:relative}
+.cell.full.unpaid::after{content:"";position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;background:var(--warn)}
+.kisa,.mob-ipucu{display:none}
+.legend .lg-ok::before{display:none}
+.legend .lg-ok{color:var(--ok);font-weight:600}
+.legend .lg-bek::before{background:var(--warn);border-radius:50%}
+@media (max-width:700px){
+  .genis{display:none!important}
+  .kisa{display:block}
+  .mob-ipucu{display:block;margin:-6px 0 0}
+  .legend{gap:4px 10px;font-size:.72rem}
+  .calw{overflow:visible;max-height:none;border-radius:10px}
+  table.cal{table-layout:fixed;width:100%;min-width:0}
+  .cal th,.cal td{padding:2px}
+  .cal thead th{min-width:0;padding:6px 2px;font-size:.66rem;line-height:1.15;text-align:center;top:calc(58px + env(safe-area-inset-top,0px));border-bottom:2px solid var(--tc,var(--line));overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cal thead th:first-child{width:42px;min-width:0;border-bottom-color:var(--line)}
+  .cal tbody th{width:42px;min-width:0;font-size:.68rem;padding:0 2px}
+  .cell{min-height:44px;padding:3px 1px;align-items:center;justify-content:center;text-align:center;gap:1px;border-radius:7px}
+  .cell.full{border-left:0;border-top:3px solid var(--tc)}
+  .cell.full b.kisa{font-size:.78rem;letter-spacing:.02em;max-width:100%}
+  .cell.full small.kisa{font-size:.6rem;max-width:100%}
+  .cell.full.paid b::after{content:"✓";font-size:.62rem;margin-left:1px}
+  .cal .cell.empty{font-size:1rem;color:color-mix(in srgb,var(--accent) 30%,transparent)}
+}
 .cell.empty{background:transparent;color:transparent;align-items:center;justify-content:center;font-size:1.2rem}
 .cell.empty:hover,.cell.empty:focus{background:var(--accent-soft);color:var(--accent)}
 .cell.closed{background:repeating-linear-gradient(45deg,var(--surface-2),var(--surface-2) 6px,transparent 6px,transparent 12px);cursor:default}
@@ -826,13 +850,15 @@ function vTakvim(){
   const doluluk=rooms.length*saatler.length?Math.round(day.length/(rooms.length*saatler.length)*100):0;
   return`<div class="page-head"><div><h1>Oda ve saat takvimi</h1></div></div>
   <div class="perbar"><div class="pnav"><button class="icon-btn" data-act="tkShift" data-v="-1" aria-label="Önceki gün">${ic('l')}</button><span class="lab">${t===TODAY?'Bugün · ':''}${fmtD(t,{day:'numeric',month:'long',weekday:'long'})}</span><button class="icon-btn" data-act="tkShift" data-v="1" aria-label="Sonraki gün">${ic('r')}</button><button class="btn sm ghost" data-act="tkToday">Bugün</button></div>
-  <div class="legend" style="margin-left:auto">${TURLER.map(x=>`<span class="t-${TK[x]}">${x}</span>`).join('')}</div></div>
-  ${kapali?`<div class="empty"><b>Pazar · şube kapalı</b>Başka bir gün seçin.</div>`:`<div class="calw"><table class="cal"><thead><tr><th>Saat</th>${rooms.map(r=>`<th>${esc(r.ad)}<small>${r.tur}</small></th>`).join('')}</tr></thead><tbody>
+  <div class="legend" style="margin-left:auto">${TURLER.map(x=>`<span class="t-${TK[x]}">${x}</span>`).join('')}<span class="lg-ok">✓ Ödendi</span><span class="lg-bek">Tahsilat bekliyor</span></div></div>
+  <p class="mob-ipucu small muted">Dolu kutuya dokunun: seans detayı · Boş kutuya dokunun: yeni randevu</p>
+  ${kapali?`<div class="empty"><b>Pazar · şube kapalı</b>Başka bir gün seçin.</div>`:`<div class="calw"><table class="cal"><thead><tr><th>Saat</th>${rooms.map(r=>`<th title="${esc(r.ad)} · ${r.tur}" class="t-${OK[r.tur]}"><span class="genis">${esc(r.ad)}<small>${r.tur}</small></span><span class="kisa">${esc(odaKisa(r))}</span></th>`).join('')}</tr></thead><tbody>
   ${saatler.map(h=>`<tr><th scope="row">${h}</th>${rooms.map(r=>{const s=day.find(x=>x.saat===h&&x.odaId===r.id);
-    if(s){const d=D(s.danisanId),u=U(s.uzmanId);return`<td><button class="cell full t-${TK[s.tur]} ${s.durum==='odendi'?'paid':''}" data-act="seansDetay" data-id="${s.id}"><b>${esc(d.ad)}</b><small>${esc(u.ad.replace(/^(Uzm\. )?Psk\. /,''))}</small></button></td>`}
+    if(s){const d=D(s.danisanId),u=U(s.uzmanId);return`<td><button class="cell full t-${TK[s.tur]} ${s.durum==='odendi'?'paid':''} ${s.durum==='bekliyor'&&gecti(s)?'unpaid':''}" data-act="seansDetay" data-id="${s.id}" aria-label="${h} ${esc(r.ad)}: ${esc(d.ad)}, ${esc(u.ad)}"><b class="genis">${esc(d.ad)}</b><small class="genis">${esc(u.ad.replace(/^(Uzm\. )?Psk\. /,''))}</small><b class="kisa">${ini(d.ad)}</b><small class="kisa">${ini(u.ad)}</small></button></td>`}
     const pastCell=t<TODAY||(t===TODAY&&parseInt(h)<nowH());
     return pastCell?`<td><div class="cell closed" aria-hidden="true"></div></td>`:`<td><button class="cell empty" data-act="bosHucre" data-t="${t}" data-h="${h}" data-o="${r.id}" aria-label="${h} ${esc(r.ad)} boş, randevu oluştur">+</button></td>`}).join('')}</tr>`).join('')}
   </tbody></table></div>`}`}
+function odaKisa(r){let w=r.ad.replace(/\s*(Odası|Oda)(?=\s|$)/i,'').trim()||r.ad;const p=w.split(' ');if(p[0].length>6)p[0]=p[0].slice(0,3)+'.';return p.join(' ')}
 function seansDetay(id){const s=SE(id),d=D(s.danisanId),u=U(s.uzmanId),o=O(s.odaId);
   sheet('Seans detayı',`<div class="secili"><div class="grow"><b>${esc(d.ad)}</b><span class="small muted">${esc(d.tel)}</span></div>${badge(s.durum)}</div>
   <dl class="kv"><dt>Tarih</dt><dd>${fmtLong(s.tarih)} · ${s.saat}</dd><dt>Uzman</dt><dd>${esc(u.ad)}</dd><dt>Oda</dt><dd>${esc(o.ad)} (${o.tur})</dd><dt>Tür</dt><dd>${s.tur}${s.sadeceEbeveyn?' · sadece ebeveyn':''}</dd><dt>Kaynak</dt><dd>${KAYNAK[s.kaynak]}${s.kaynak==='firma'?` · ${esc(F(s.firmaId).ad)}`:''}</dd><dt>Ücret</dt><dd class="num">${s.kaynak==='firma'?'Ücretsiz (firma danışanı)':TL(s.ucret)}</dd>${s.not?`<dt>Not</dt><dd>${esc(s.not)}</dd>`:''}</dl>`,
