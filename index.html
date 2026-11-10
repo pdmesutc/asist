@@ -458,6 +458,13 @@ function telDurum(el){let m=el.nextElementSibling;if(!m||!m.classList.contains('
 function telAlanlariniKontrolEt(){$$('[data-tel]').forEach(telDurum)}
 function telHata(ids){for(const [id,ad,zorunlu] of ids){const el=document.getElementById(id);if(!el)continue;const v=el.value;
   if(!v&&!zorunlu)continue;if(!telOk(v,el.dataset.tel==='sabit')){telDurum(el);el.focus();return`${ad}: 10 haneli${el.dataset.tel==='sabit'?'':', 5 ile başlayan cep'} numarası girin (boşluksuz, başında 0 olmadan).`}}return''}
+const TC_KUCUK=new Set(['ve','ile','veya','için','ya','da','de','ki','mi']);
+function tcMetin(t){let i=0;return t.replace(/[^\s]+/g,w=>{const ilk=i++===0;const m=w.match(/^([^A-Za-zÇĞİÖŞÜçğıöşü]*)([A-Za-zÇĞİÖŞÜçğıöşü])(.*)$/);if(!m)return w;
+  if(!ilk&&!m[1]&&TC_KUCUK.has(w.toLocaleLowerCase('tr')))return w;return m[1]+m[2].toLocaleUpperCase('tr')+m[3]})}
+const TC_SEC='h1,h2,.field>span,.lbl,.stat .k,.btn,.seg label,.seg button,.nv,.bnav span,.chip,.cmsg.baslik';
+function tcUygula(kok){const els=[];if(kok.matches&&kok.matches(TC_SEC))els.push(kok);if(kok.querySelectorAll)els.push(...kok.querySelectorAll(TC_SEC));
+  els.forEach(el=>{if(el.closest('.no-tc'))return;const w=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);let n,ilk=true;while(n=w.nextNode()){if(n.parentElement.closest('small,.muted,.n,.badge,.tchip,.telmsg'))continue;const y=tcMetin(n.data);if(y!==n.data)n.data=y}})}
+new MutationObserver(ms=>ms.forEach(m=>m.addedNodes.forEach(n=>{const e=n.nodeType===1?n:n.parentElement;if(e)tcUygula(n.nodeType===1?n:(e.matches(TC_SEC)?e:e.closest(TC_SEC)||e))}))).observe(document.documentElement,{childList:true,subtree:true});
 const uid=p=>(p||'x')+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const low=s=>String(s||'').toLocaleLowerCase('tr');
 const digits=s=>String(s||'').replace(/\D/g,'');
@@ -856,7 +863,7 @@ function vTakvim(){
   const kapali=parse(t).getDay()===0;
   const saatler=SAATLER.filter(h=>h>=sb.acilis&&h<sb.kapanis);
   const doluluk=rooms.length*saatler.length?Math.round(day.length/(rooms.length*saatler.length)*100):0;
-  return`<div class="page-head"><div><h1>Oda ve saat takvimi</h1></div></div>
+  return`<div class="page-head"><div><h1>Oda Takvimi</h1></div></div>
   <div class="perbar"><div class="pnav"><button class="icon-btn" data-act="tkShift" data-v="-1" aria-label="Önceki gün">${ic('l')}</button><span class="lab">${t===TODAY?'Bugün · ':''}${fmtD(t,{day:'numeric',month:'long',weekday:'long'})}</span><button class="icon-btn" data-act="tkShift" data-v="1" aria-label="Sonraki gün">${ic('r')}</button><button class="btn sm ghost" data-act="tkToday">Bugün</button></div>
   <div class="legend" style="margin-left:auto">${TURLER.map(x=>`<span class="t-${TK[x]}">${x}</span>`).join('')}<span class="lg-ok">✓ Ödendi</span></div></div>
   ${kapali?`<div class="empty"><b>Pazar · şube kapalı</b>Başka bir gün seçin.</div>`:`<div class="calw"><table class="cal"><thead><tr><th>Saat</th>${rooms.map(r=>`<th title="${esc(r.ad)} · ${r.tur}" class="t-${OK[r.tur]}"><span class="genis">${esc(r.ad)}<small>${r.tur}</small></span><span class="kisa">${esc(odaKisa(r))}</span></th>`).join('')}</tr></thead><tbody>
@@ -1027,7 +1034,7 @@ function rInit(){const p=UI.prefill||{};UI.prefill=null;
 
 /* ============ Danışan rehberi ============ */
 function vDanisanlar(){UI.dk=UI.dk||'sube';
-  return`<div class="page-head"><div><h1>Danışan rehberi</h1><p>${S.danisanlar.length.toLocaleString('tr-TR')} kayıt · 2023–2025 arşivi ve güncel seanslar birlikte sayılır</p></div><button class="btn primary" data-act="go" data-v="randevu">${ic('plus')}Yeni randevu</button></div>
+  return`<div class="page-head"><div><h1>Danışanlar</h1><p>${S.danisanlar.length.toLocaleString('tr-TR')} kayıt · 2023–2025 arşivi ve güncel seanslar birlikte sayılır</p></div><button class="btn primary" data-act="go" data-v="randevu">${ic('plus')}Yeni randevu</button></div>
   <div class="toolbar"><div class="search">${ic('search')}<input id="dq" placeholder="Ad, telefon veya veli adı ile ara" value="${esc(UI.dq||'')}" data-in="dAra" aria-label="Danışan ara"></div>
   <div class="seg"><button class="${UI.dk==='sube'?'on':''}" data-act="dKapsam" data-v="sube">Sadece bu şube</button><button class="${UI.dk==='tum'?'on':''}" data-act="dKapsam" data-v="tum">Tüm şubeler</button></div></div>
   <div id="dList">${dListHTML()}</div>`}
@@ -1091,7 +1098,7 @@ function vKasa(){const[b,e]=perRange();const k=kasa(UI.subeId,b,e);
 /* ============ Giderler ============ */
 function vGiderler(){const[b,e]=perRange();const list=S.masraflar.filter(m=>m.subeId===UI.subeId&&m.tarih>=b&&m.tarih<=e).sort((a,c)=>c.tarih.localeCompare(a.tarih));
   const tot=list.reduce((a,m)=>a+m.tutar,0);const byK={};list.forEach(m=>byK[m.kategori]=(byK[m.kategori]||0)+m.tutar);
-  return`<div class="page-head"><div><h1>Ofis giderleri</h1><p>Girilen giderler ofis net kârından otomatik düşülür.</p></div></div>
+  return`<div class="page-head"><div><h1>Giderler</h1><p>Girilen giderler ofis net kârından otomatik düşülür.</p></div></div>
   ${perBar(['hafta','ay','ozel'])}
   <form class="card" data-submit="gEkle"><h2>Gider ekle</h2><div class="row2">${fld('Kategori',`<select id="g_kat">${GIDER_KAT.map(k=>`<option>${k}</option>`).join('')}</select>`)}${fld('Tutar (₺)','<input id="g_tutar" type="number" inputmode="decimal" min="0" required>')}</div>
   <div class="row2">${fld('Tarih',`<input id="g_tarih" type="date" value="${TODAY}">`)}${fld('Açıklama','<input id="g_ac" placeholder="Örn. Kasım kirası">')}</div><div style="display:flex;justify-content:flex-end"><button class="btn primary" type="submit">${ic('plus')}Gideri kaydet</button></div></form>
@@ -1104,7 +1111,7 @@ function vSms(){const t=UI.smsT||addDays(TODAY,1);
   UI.smsSel=UI.smsSel&&UI.smsSel.t===t?UI.smsSel:{t,ids:new Set(list.map(s=>s.id))};
   const sel=list.filter(s=>UI.smsSel.ids.has(s.id));const nAl=sel.reduce((a,s)=>a+alicilar(D(s.danisanId)).length,0);
   const log=S.smsLog.filter(l=>l.subeId===UI.subeId).slice(0,12);
-  return`<div class="page-head"><div><h1>Toplu hatırlatma SMS</h1><p>${S.netgsm.kod?`NetGSM bağlı · başlık ${esc(S.netgsm.baslik)}`:'NetGSM hesabı tanımlı değil · gönderimler simülasyon olarak kaydedilir'}</p></div></div>
+  return`<div class="page-head"><div><h1>Toplu SMS</h1><p>${S.netgsm.kod?`NetGSM bağlı · başlık ${esc(S.netgsm.baslik)}`:'NetGSM hesabı tanımlı değil · gönderimler simülasyon olarak kaydedilir'}</p></div></div>
   <div class="form-grid">
   <div class="card"><div class="card-h"><h2>Seanslar</h2><input type="date" class="inp" style="width:auto;min-height:40px" value="${t}" data-chg="smsTarih" aria-label="Tarih"></div>
    ${list.length?`<label class="chk"><input type="checkbox" id="smsAll" data-chg="smsTum" ${sel.length===list.length?'checked':''}> <b>Tümünü seç</b> <span class="muted small">(${list.length} seans)</span></label>
@@ -1124,7 +1131,7 @@ function firmaListe(fid,b,e,subeId){return S.seanslar.filter(s=>s.durum!=='iptal
 function vFirma(){if(UI.per.tip==='gun'||UI.per.tip==='hafta'){UI.per.tip='ay'}
   const fs=S.firmalar.filter(f=>f.subeIds.includes(UI.subeId));UI.fsec=fs.some(f=>f.id===UI.fsec)?UI.fsec:(fs[0]||{}).id;
   const[b,e]=perRange();const list=UI.fsec?firmaListe(UI.fsec,b,e,UI.subeId):[];const dset=[...new Set(list.map(s=>s.danisanId))];const tam=list.filter(s=>s.durum==='odendi').length;
-  return`<div class="page-head"><div><h1>Kurumsal firma raporu</h1><p>Anlaşmalı kurumların bu şubedeki seans dökümü</p></div></div>
+  return`<div class="page-head"><div><h1>Firma Raporu</h1><p>Anlaşmalı kurumların bu şubedeki seans dökümü</p></div></div>
   ${perBar(['ay','ozel'])}
   ${fs.length?`<div class="toolbar"><select class="inp" style="width:auto" data-chg="firmaSec" aria-label="Firma">${fs.map(f=>`<option value="${f.id}" ${f.id===UI.fsec?'selected':''}>${esc(f.ad)}</option>`).join('')}</select>
   <button class="btn" data-act="csv" ${list.length?'':'disabled'}>${ic('dl')}Excel / CSV indir</button><button class="btn ghost" data-act="csvKopya" ${list.length?'':'disabled'}>${ic('copy')}Kopyala</button></div>
@@ -1149,14 +1156,14 @@ function vOzet(){if(UI.per.tip==='gun'&&!UI._ozetSet){UI.per.tip='ay';UI._ozetSe
    <div class="stat"><span class="k">Uzman hak ediş toplamı</span><span class="v">${TL(k.uzman)}</span></div>
    <div class="stat"><span class="k">Genel masraflar</span><span class="v">${TL(k.masraf)}</span></div>
   </div>
-  <div class="stats"><div class="stat"><span class="k" style="color:var(--warn)">${ic('alert')}Tahsilatı girilmemiş</span><span class="v">${unpaid}</span><span class="d">geçmiş seans</span></div><div class="stat"><span class="k">Önümüzdeki 7 gün</span><span class="v">${gelecek}</span><span class="d">planlı randevu</span></div><div class="stat"><span class="k">Danışan rehberi</span><span class="v">${S.danisanlar.length.toLocaleString('tr-TR')}</span><span class="d">${S.uzmanlar.filter(u=>u.aktif).length} aktif uzman</span></div></div>
+  <div class="stats"><div class="stat"><span class="k" style="color:var(--warn)">${ic('alert')}Tahsilatı girilmemiş</span><span class="v">${unpaid}</span><span class="d">geçmiş seans</span></div><div class="stat"><span class="k">Önümüzdeki 7 gün</span><span class="v">${gelecek}</span><span class="d">planlı randevu</span></div><div class="stat"><span class="k">Danışanlar</span><span class="v">${S.danisanlar.length.toLocaleString('tr-TR')}</span><span class="d">${S.uzmanlar.filter(u=>u.aktif).length} aktif uzman</span></div></div>
   <div class="card"><div class="card-h"><h2>Şube karşılaştırması</h2><span class="small muted">Gözlem modu ile şube asistan paneline geçebilirsiniz</span></div>
   <div class="tw"><table class="tbl"><thead><tr><th>Şube</th><th class="r">Seans</th><th class="r">Brüt</th><th class="r">KDV</th><th class="r">Hak ediş</th><th class="r">Gider</th><th class="r">Net kâr</th><th></th></tr></thead><tbody>
   ${S.subeler.map(sb=>{const x=kasa(sb.id,b,e);return`<tr><td><b>${esc(sb.ad)}</b></td><td class="r">${x.adet}</td><td class="r">${TL(x.tahsilat)}</td><td class="r">${TL(x.kdv)}</td><td class="r">${TL(x.uzman)}</td><td class="r">${TL(x.masraf)}</td><td class="r"><b>${TL(x.net)}</b></td><td class="r"><button class="btn sm" data-act="gozlem" data-v="${sb.id}">${ic('eye')}Gözlem</button></td></tr>`}).join('')}
   </tbody></table></div></div>
   <div class="card"><h2>Uzman performansı</h2>${uzRows.length?`<div class="tw"><table class="tbl"><thead><tr><th>Uzman</th><th class="r">Seans</th><th class="r">Brüt</th><th class="r">Ofis payı</th><th class="r">Hak ediş</th></tr></thead><tbody>${uzRows.map(([id,x])=>`<tr><td>${esc(U(id).ad)}${U(id).aktif?'':' <span class="badge b-pasif">Pasif</span>'}</td><td class="r">${x.adet}</td><td class="r">${TL(x.brut)}</td><td class="r">${TL(x.ofis)}</td><td class="r">${TL(x.uzman)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty"><b>Bu dönemde veri yok</b></div>'}</div>`}
 
-function vSubeler(){return`<div class="page-head"><div><h1>Şubeler ve odalar</h1><p>${S.subeler.length} şube · ${S.odalar.length} oda</p></div><button class="btn primary" data-act="subeDuz" data-id="">${ic('plus')}Şube ekle</button></div>
+function vSubeler(){return`<div class="page-head"><div><h1>Şubeler & Odalar</h1><p>${S.subeler.length} şube · ${S.odalar.length} oda</p></div><button class="btn primary" data-act="subeDuz" data-id="">${ic('plus')}Şube ekle</button></div>
   <div class="grid2">${S.subeler.map(sb=>{const rooms=S.odalar.filter(o=>o.subeId===sb.id);return`<div class="lc"><div class="lc-h"><div><b>${esc(sb.ad)}</b><div class="small muted">${esc(sb.adres)}</div></div><button class="btn sm" data-act="subeDuz" data-id="${sb.id}">Düzenle</button></div>
    <div class="meta"><span>Çalışma <strong class="num">${sb.acilis}–${sb.kapanis}</strong></span><span>Tel <strong>${esc(sb.tel||'—')}</strong></span>${sb.harita?`<a href="${esc(sb.harita)}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">Haritada aç ↗</a>`:''}</div>
    <div class="rooms">${rooms.map(o=>`<div><span><b style="font-weight:600">${esc(o.ad)}</b> <span class="tchip t-${OK[o.tur]}">${o.tur}</span></span><button class="btn sm ghost" data-act="odaDuz" data-id="${o.id}" data-s="${sb.id}">Düzenle</button></div>`).join('')||'<div class="muted small">Oda yok</div>'}</div>
@@ -1174,7 +1181,7 @@ function uzDuz(id){const u=id?U(id):{ad:'',tel:'',email:'',sifre:'',alanlar:['Ye
   ${fld('Giriş şifresi',`<input id="u_sifre" type="text" value="${esc(u.sifre)}">`)}
   <div><span class="lbl">Uzmanlık alanları</span><div class="chips" style="margin-top:6px">${TURLER.map(t=>`<label class="chip"><input type="checkbox" name="u_alan" value="${t}" ${u.alanlar.includes(t)?'checked':''}>${t}</label>`).join('')}</div></div>
   <div><span class="lbl">Görev yaptığı şubeler</span><div class="chips" style="margin-top:6px">${S.subeler.map(s=>`<label class="chip"><input type="checkbox" name="u_sube" value="${s.id}" ${u.subeIds.includes(s.id)?'checked':''}>${esc(s.ad)}</label>`).join('')}</div></div>
-  <div class="row2">${fld('Kendi danışanı · ofis payı %',`<input id="u_ok" type="number" min="0" max="100" value="${u.oranKendi}">`)}${fld('Ofis yönlendirmesi · ofis payı %',`<input id="u_oy" type="number" min="0" max="100" value="${u.oranYonlendirme}">`)}</div>
+  <div class="row2">${fld('Kendi danışanı · ofis payı %',`<input id="u_ok" type="number" min="0" max="100" value="${u.oranKendi}">`)}${fld('Ofis danışanı · ofis payı %',`<input id="u_oy" type="number" min="0" max="100" value="${u.oranYonlendirme}">`)}</div>
   <div class="small muted">Örnek: 2.000 ₺ yönlendirme seansında KDV sonrası matrahın %${u.oranYonlendirme}’i ofise, kalanı uzmana yazılır.</div>
   <label class="sw"><span>Danışan telefonlarını görebilir</span><input type="checkbox" id="u_telgor" ${u.telGor?'checked':''}><i></i></label>
   <label class="sw"><span>Seans bilgilendirme SMS’i alsın</span><input type="checkbox" id="u_sms" ${u.sms?'checked':''}><i></i></label>
@@ -1182,7 +1189,7 @@ function uzDuz(id){const u=id?U(id):{ad:'',tel:'',email:'',sifre:'',alanlar:['Ye
   `${id?`<button class="btn ${u.aktif?'danger':''}" data-act="uzPasif" data-id="${id}">${u.aktif?'Pasife al':'Yeniden aktifleştir'}</button>`:''}<button class="btn" data-act="kapat">Vazgeç</button><button class="btn primary" data-act="uzKaydet" data-id="${id||''}">Kaydet</button>`)}
 
 function vFiyat(){const ex=hesapla(S.fiyat['Yetişkin'],S.ayar.kdv,true,50);
-  return`<div class="page-head"><div><h1>Hizmet türleri ve fiyat</h1><p>Merkez standart taban seans ücretleri. Randevu sırasında asistan tutarı değiştirebilir.</p></div></div>
+  return`<div class="page-head"><div><h1>Hizmet & Fiyat</h1><p>Merkez standart taban seans ücretleri. Randevu sırasında asistan tutarı değiştirebilir.</p></div></div>
   <div class="form-grid"><div class="card"><h2>Taban seans ücretleri</h2>${TURLER.map(t=>`<div class="row2" style="align-items:center"><span>${tchip(t)} <span class="small muted">seansı</span></span>${fld('Ücret (₺)',`<input id="fy_${TK[t]}" type="number" min="0" value="${S.fiyat[t]}">`)}</div>`).join('')}</div>
   <div class="card"><h2>KDV</h2>${fld('KDV oranı (%)',`<input id="fy_kdv" type="number" min="0" max="100" value="${S.ayar.kdv}">`)}
   <span class="small muted">Tüm tahsilatlarda bu oran kullanılır; asistan oran seçmez. Tahsilatta "KDV'li" işaretlenirse KDV tutarın içinden ayrılır, işaretlenmezse tutar KDV'siz sayılır. Uzman hak edişi her zaman KDV hariç tutar üzerinden hesaplanır.</span>
@@ -1197,16 +1204,16 @@ function vFirmalar(){const[b,e]=(()=>{const d=parse(TODAY);return[ds(new Date(d.
    <div class="meta"><span>Bu ay <strong class="num">${l.length} firma seansı</strong></span><span>${esc(f.yetkili||'')}</span></div></button>`}).join('')}</div>`}
 function firmaDuz(id){const f=id?F(id):{ad:'',vergi:'',adres:'',yetkili:'',subeIds:S.subeler.map(s=>s.id),uzmanKisit:'tum',uzmanIds:[]};
   sheet(id?'Firmayı düzenle':'Yeni kurumsal firma',`${fld('Firma / kurum adı',`<input id="f_ad" value="${esc(f.ad)}">`)}
-  <div class="row2">${fld('Vergi dairesi · no',`<input id="f_vergi" value="${esc(f.vergi)}">`)}${fld('Yetkili / iletişim',`<input id="f_yet" value="${esc(f.yetkili)}">`)}</div>
+  <div class="row2">${fld('Vergi dairesi / no',`<input id="f_vergi" value="${esc(f.vergi)}">`)}${fld('Yetkili / iletişim',`<input id="f_yet" value="${esc(f.yetkili)}">`)}</div>
   ${fld('Fatura adresi',`<textarea id="f_adres">${esc(f.adres)}</textarea>`)}
   <div><span class="lbl">Hizmet alabileceği şubeler</span><div class="chips" style="margin-top:6px">${S.subeler.map(s=>`<label class="chip"><input type="checkbox" name="f_sube" value="${s.id}" ${f.subeIds.includes(s.id)?'checked':''}>${esc(s.ad)}</label>`).join('')}</div></div>
-  <div><span class="lbl">Yetkili uzmanlar</span><div class="seg" style="margin-top:6px"><label><input type="radio" name="f_kisit" value="tum" ${f.uzmanKisit==='tum'?'checked':''} data-chg="fKisit">Tüm uzmanlar</label><label><input type="radio" name="f_kisit" value="secili" ${f.uzmanKisit==='secili'?'checked':''} data-chg="fKisit">Yalnızca seçili</label></div>
+  <div><span class="lbl">Yetkili uzmanlar</span><div class="seg" style="margin-top:6px"><label><input type="radio" name="f_kisit" value="tum" ${f.uzmanKisit==='tum'?'checked':''} data-chg="fKisit">Tüm uzmanlar</label><label><input type="radio" name="f_kisit" value="secili" ${f.uzmanKisit==='secili'?'checked':''} data-chg="fKisit">Sadece seçili</label></div>
   <div class="chips" id="f_uzlar" style="margin-top:8px" ${f.uzmanKisit==='tum'?'hidden':''}>${S.uzmanlar.filter(u=>u.aktif).map(u=>`<label class="chip"><input type="checkbox" name="f_uz" value="${u.id}" ${f.uzmanIds.includes(u.id)?'checked':''}>${esc(u.ad)}</label>`).join('')}</div></div>`,
   `<button class="btn" data-act="kapat">Vazgeç</button><button class="btn primary" data-act="firmaKaydet" data-id="${id||''}">Kaydet</button>`)}
 
 function vSmsAyar(){const n=S.netgsm;const L={yeni:'Danışan · yeni randevu',iptal:'Danışan · iptal',degisiklik:'Danışan · değişiklik',hatirlatma:'Danışan · hatırlatma',uzman:'Uzman · seans bilgilendirme'};
-  return`<div class="page-head"><div><h1>SMS ve iletişim merkezi</h1><p>NetGSM entegrasyonu ve otomatik mesaj şablonları</p></div></div>
-  <div class="form-grid"><div class="card"><h2>NetGSM API</h2>${fld('Kullanıcı kodu',`<input id="n_kod" value="${esc(n.kod)}" placeholder="850xxxxxxx">`)}${fld('API şifresi',`<input id="n_sifre" type="password" value="${esc(n.sifre)}">`)}${fld('SMS başlığı (originator)',`<input id="n_baslik" value="${esc(n.baslik)}" maxlength="11">`)}
+  return`<div class="page-head"><div><h1>SMS Merkezi</h1><p>NetGSM entegrasyonu ve otomatik mesaj şablonları</p></div></div>
+  <div class="form-grid"><div class="card"><h2>NetGSM API</h2>${fld('Kullanıcı kodu',`<input id="n_kod" value="${esc(n.kod)}" placeholder="850xxxxxxx">`)}${fld('API şifresi',`<input id="n_sifre" type="password" value="${esc(n.sifre)}">`)}${fld('SMS başlığı (gönderici adı)',`<input id="n_baslik" value="${esc(n.baslik)}" maxlength="11">`)}
    <div class="small muted">Gerçek gönderim için şifre sunucu tarafında saklanmalıdır. Bu demoda gönderimler kayıt altına alınır, operatöre iletilmez.</div>
    <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" data-act="netgsmTest">Bağlantıyı test et</button></div>
    <h2 style="margin-top:10px">Demo verisi</h2><span class="small muted">Tüm kayıtları silip örnek verileri yeniden yükler.</span><div><button class="btn danger" data-act="sifirla">Demo verisini sıfırla</button></div></div>
@@ -1220,7 +1227,7 @@ function vAjanda(){UI.aj=UI.aj||'gun';const u=U(UI.uzmanId);const t=UI.ajT||TODA
   const list=S.seanslar.filter(s=>s.uzmanId===u.id&&s.tarih>=b&&s.tarih<=e);
   const bugun=S.seanslar.filter(s=>s.uzmanId===u.id&&s.tarih===TODAY&&s.durum!=='iptal').sort((a,c)=>a.saat.localeCompare(c.saat));
   const sonraki=bugun.find(s=>parseInt(s.saat)>=nowH());
-  return`<div class="page-head"><div><h1>Merhaba, ${esc(u.ad.replace(/^(Uzm\. )?Psk\. /,'').split(' ')[0])}</h1><p>Bugün ${bugun.length} seansınız var${sonraki?` · sıradaki ${sonraki.saat}, ${esc(B(sonraki.subeId).ad)} / ${esc(O(sonraki.odaId).ad)}`:''}</p></div><button class="btn primary" data-act="go" data-v="kendi">${ic('plus')}Yeni randevu</button></div>
+  return`<div class="page-head"><div><h1>Görüşmeler</h1><p>Bugün ${bugun.length} seansınız var${sonraki?` · sıradaki ${sonraki.saat}, ${esc(B(sonraki.subeId).ad)} / ${esc(O(sonraki.odaId).ad)}`:''}</p></div><button class="btn primary" data-act="go" data-v="kendi">${ic('plus')}Yeni randevu</button></div>
   <div class="perbar"><div class="seg"><button class="${UI.aj==='gun'?'on':''}" data-act="ajTip" data-v="gun">Günlük</button><button class="${UI.aj==='hafta'?'on':''}" data-act="ajTip" data-v="hafta">Haftalık</button></div>
   <div class="pnav"><button class="icon-btn" data-act="ajShift" data-v="-1" aria-label="Önceki">${ic('l')}</button><span class="lab">${UI.aj==='gun'?fmtD(t,{day:'numeric',month:'long',weekday:'short'}):fmtD(b,{day:'numeric',month:'short'})+' – '+fmtD(e,{day:'numeric',month:'short'})}</span><button class="icon-btn" data-act="ajShift" data-v="1" aria-label="Sonraki">${ic('r')}</button><button class="btn sm ghost" data-act="ajToday">Bugün</button></div></div>
   ${gunGrupla(list,{psikolog:true})}`}
@@ -1244,7 +1251,7 @@ function vHakedis(){const u=U(UI.uzmanId);if(!UI._hkSet){UI.per={tip:'ay',ref:TO
   ${list.length?`<div class="tw"><table class="tbl"><thead><tr><th>Tarih</th><th>Danışan</th><th>Şube</th><th>Kaynak</th><th class="r">Matrah</th><th class="r">Ofis payı</th><th class="r">Hak ediş</th><th>Ödeme</th></tr></thead><tbody>${list.map(s=>`<tr><td class="num">${fmtD(s.tarih,{day:'numeric',month:'short'})} ${s.saat}</td><td>${esc(D(s.danisanId).ad)}</td><td>${esc(B(s.subeId).ad)}</td><td>${KAYNAK[s.kaynak]}</td><td class="r">${TL(s.odeme.matrah)}</td><td class="r">${TL(s.odeme.ofis)}</td><td class="r"><b>${TL(s.odeme.uzman)}</b></td><td>${s.kaynak==='firma'?'<span class="badge b-pasif">Firma</span>':odendiMi(s)?'<span class="badge b-odendi">Ödendi</span>':'<span class="badge b-bekliyor">Bekliyor</span>'}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="4">Toplam</td><td class="r">${TL(k.matrah)}</td><td class="r">${TL(k.ofis)}</td><td class="r">${TL(k.uzman)}</td><td></td></tr></tfoot></table></div>`:`<div class="empty"><b>${L} tamamlanan seans yok</b>Dönemi değiştirerek diğer tarihlere bakabilirsiniz.</div>`}`}
 function vMusaitlik(){const u=U(UI.uzmanId);UI.ms=u.subeIds.includes(UI.ms)?UI.ms:u.subeIds[0];const sb=B(UI.ms);const m=(u.musait[UI.ms]=u.musait[UI.ms]||{});
   const saatler=SAATLER.filter(h=>h>=sb.acilis&&h<sb.kapanis);
-  return`<div class="page-head"><div><h1>Müsaitlik ve izinler</h1><p>Asistanlar yalnızca işaretlediğiniz saatlere randevu verebilir.</p></div></div>
+  return`<div class="page-head"><div><h1>Müsaitlik</h1><p>Asistanlar yalnızca işaretlediğiniz saatlere randevu verebilir.</p></div></div>
   <div class="cmsg" style="background:var(--surface);border:1px solid var(--line);color:var(--ink)"><span>${ic('clock')} <b>${esc(sb.ad)}</b> şubesi çalışma saatleri: <b>${sb.acilis}–${sb.kapanis}</b>. Saatler yönetici panelindeki şube ayarlarından gelir; bu aralığın dışı seçilemez.</span></div>
   ${u.subeIds.length>1?`<div class="seg">${u.subeIds.map(id=>`<button class="${id===UI.ms?'on':''}" data-act="mSube" data-v="${id}">${esc(B(id).ad)}</button>`).join('')}</div>`:''}
   <div class="days">${[1,2,3,4,5,6].map(g=>{const h=(m[g]||[]).filter(x=>saatler.includes(x));const diger=u.subeIds.filter(id=>id!==UI.ms&&((u.musait[id]||{})[g]||[]).length).map(id=>B(id).ad);
@@ -1263,7 +1270,7 @@ function seansDuz(id){const s=SE(id),d=D(s.danisanId),o=s.odeme;A._sid=id;
   ${fld('Seans türü',`<select id="sd_tur">${TURLER.map(t=>`<option ${t===s.tur?'selected':''}>${t}</option>`).join('')}</select>`)}</div>
   ${fld('Kaynak',`<select id="sd_kaynak" data-chg="sdKaynak">${Object.entries(KAYNAK).map(([k,l])=>`<option value="${k}" ${s.kaynak===k?'selected':''}>${l}</option>`).join('')}</select>`)}
   <div id="sd_firmaBox" class="sub-box" ${s.kaynak==='firma'?'':'hidden'}>${fld('Firma',`<select id="sd_firma" data-chg="sdCalc"><option value="">Firma seçin</option>${S.firmalar.filter(f=>f.subeIds.includes(s.subeId)||f.id===s.firmaId).map(f=>`<option value="${f.id}" ${f.id===(s.firmaId||d.firmaId)?'selected':''}>${esc(f.ad)}</option>`).join('')}</select>`)}<span class="small muted">Firma danışanından ücret alınmaz. Danışanın kartındaki firma da bu seçime göre güncellenir.</span></div>
-  ${fld(o?'Brüt ücret (₺)':'Ücret (₺)',`<input id="sd_ucret" type="number" inputmode="decimal" min="0" value="${s.ucret}" data-in="sdCalc" ${s.kaynak==='firma'||o?'disabled':''}>`)}
+  ${fld(o?'Ücret (₺)':'Ücret (₺)',`<input id="sd_ucret" type="number" inputmode="decimal" min="0" value="${s.ucret}" data-in="sdCalc" ${s.kaynak==='firma'||o?'disabled':''}>`)}
   ${o&&s.kaynak!=='firma'?'<span class="small muted" style="margin-top:-8px">Ödenmiş seansta tutar aşağıdaki tahsilat bilgilerinden değiştirilir.</span>':''}
   ${s.tur==='Çocuk'||s.tur==='Ergen'?`<label class="chk"><input type="checkbox" id="sd_eb" ${s.sadeceEbeveyn?'checked':''}> Sadece ebeveyn görüşmesi</label>`:''}
   ${fld('Not',`<textarea id="sd_not">${esc(s.not||'')}</textarea>`)}
@@ -1271,7 +1278,7 @@ function seansDuz(id){const s=SE(id),d=D(s.danisanId),o=s.odeme;A._sid=id;
     ${odemeAlanlari('sd2',s.ucret,!!o.kdvOran,o.oran??oran(s),`Uzman varsayılanı %${oran(s)}`,o.kanal)}
     ${fld('Ödeme tarihi',`<input id="sd_ot" type="date" value="${o.tarih||s.tarih}">`)}
     <div class="calc" id="sd_prev"></div>
-    <div><button class="btn sm danger" data-act="tahsilatGeri" data-id="${id}">Tahsilatı geri al (bekliyor yap)</button></div></div>`:''}
+    <div><button class="btn sm danger" data-act="tahsilatGeri" data-id="${id}">Tahsilatı geri al</button></div></div>`:''}
   <div id="sd_msg" class="cmsg" hidden></div>
   ${gec.length?`<div><h3 style="margin-bottom:6px">Değişiklik geçmişi</h3><div class="hist">${gec.map(g=>`<div><b class="small">${new Date(g.z).toLocaleDateString('tr-TR',{day:'numeric',month:'short'})}</b><span class="small">${esc(g.i)}</span><span class="small muted">${esc(g.k)}</span></div>`).join('')}</div></div>`:''}`,
   `<button class="btn" data-act="kapat">Vazgeç</button><button class="btn primary" data-act="seansKaydet">Değişiklikleri kaydet</button>`);A.sdCalc()}
@@ -1282,11 +1289,11 @@ function sdHes(){return odemeHes('sd2')}
 function danisanDuz(id){const d=D(id);const p=x=>x||{ad:'',tel:''};const es=p(d.es),an=p(d.anne),ba=p(d.baba);
   sheet('Danışan bilgilerini düzenle',`${fld('Ad soyad',`<input id="dd_ad" value="${esc(d.ad)}">`)}
   <div class="row2">${fld('Telefon',`<input id="dd_tel" type="tel" data-tel inputmode="numeric" placeholder="5XXXXXXXXX" autocomplete="off" value="${esc(d.tel||'')}">`)}${fld('Danışan türü',`<select id="dd_tur" data-chg="ddTur">${TURLER.map(t=>`<option ${t===d.tur?'selected':''}>${t}</option>`).join('')}</select>`)}</div>
-  <label class="chk"><input type="checkbox" id="dd_sms" ${d.sms.ana?'checked':''}> Danışana SMS gönderilsin</label>
-  <div class="sub-box" id="dd_cift" ${d.tur==='Çift'?'':'hidden'}><span class="lbl">Eş / partner</span><div class="row2">${fld('Ad soyad',`<input id="dd_es_ad" value="${esc(es.ad)}">`)}${fld('Telefon',`<input id="dd_es_tel" type="tel" data-tel inputmode="numeric" placeholder="5XXXXXXXXX" autocomplete="off" value="${esc(es.tel)}">`)}</div><label class="chk"><input type="checkbox" id="dd_sms_es" ${d.sms.es?'checked':''}> SMS gönderilsin</label></div>
-  <div class="sub-box" id="dd_coc" ${d.tur==='Çocuk'||d.tur==='Ergen'?'':'hidden'}><span class="lbl">Ebeveynler</span>
-   <div class="row2">${fld('Anne adı',`<input id="dd_an_ad" value="${esc(an.ad)}">`)}${fld('Anne telefonu',`<input id="dd_an_tel" type="tel" data-tel inputmode="numeric" placeholder="5XXXXXXXXX" autocomplete="off" value="${esc(an.tel)}">`)}</div><label class="chk"><input type="checkbox" id="dd_sms_an" ${d.sms.anne?'checked':''}> Anneye SMS</label>
-   <div class="row2">${fld('Baba adı',`<input id="dd_ba_ad" value="${esc(ba.ad)}">`)}${fld('Baba telefonu',`<input id="dd_ba_tel" type="tel" data-tel inputmode="numeric" placeholder="5XXXXXXXXX" autocomplete="off" value="${esc(ba.tel)}">`)}</div><label class="chk"><input type="checkbox" id="dd_sms_ba" ${d.sms.baba?'checked':''}> Babaya SMS</label></div>
+  <label class="chk"><input type="checkbox" id="dd_sms" ${d.sms.ana?'checked':''}> Danışana SMS gönder</label>
+  <div class="sub-box" id="dd_cift" ${d.tur==='Çift'?'':'hidden'}><span class="lbl">2. danışan (eş / partner)</span><div class="row2">${fld('Ad soyad',`<input id="dd_es_ad" value="${esc(es.ad)}">`)}${fld('Telefon',`<input id="dd_es_tel" type="tel" data-tel inputmode="numeric" placeholder="5XXXXXXXXX" autocomplete="off" value="${esc(es.tel)}">`)}</div><label class="chk"><input type="checkbox" id="dd_sms_es" ${d.sms.es?'checked':''}> Eşe / partnere SMS gönder</label></div>
+  <div class="sub-box" id="dd_coc" ${d.tur==='Çocuk'||d.tur==='Ergen'?'':'hidden'}><span class="lbl">Ebeveyn bilgileri</span>
+   <div class="row2">${fld('Anne adı',`<input id="dd_an_ad" value="${esc(an.ad)}">`)}${fld('Anne telefonu',`<input id="dd_an_tel" type="tel" data-tel inputmode="numeric" placeholder="5XXXXXXXXX" autocomplete="off" value="${esc(an.tel)}">`)}</div><label class="chk"><input type="checkbox" id="dd_sms_an" ${d.sms.anne?'checked':''}> Anneye SMS gönder</label>
+   <div class="row2">${fld('Baba adı',`<input id="dd_ba_ad" value="${esc(ba.ad)}">`)}${fld('Baba telefonu',`<input id="dd_ba_tel" type="tel" data-tel inputmode="numeric" placeholder="5XXXXXXXXX" autocomplete="off" value="${esc(ba.tel)}">`)}</div><label class="chk"><input type="checkbox" id="dd_sms_ba" ${d.sms.baba?'checked':''}> Babaya SMS gönder</label></div>
   <div class="row2">${fld('Kayıtlı şube',`<select id="dd_sube">${S.subeler.map(b=>`<option value="${b.id}" ${b.id===d.subeId?'selected':''}>${esc(b.ad)}</option>`).join('')}</select>`)}
   ${fld('Kurumsal firma',`<select id="dd_firma"><option value="">Yok</option>${S.firmalar.map(f=>`<option value="${f.id}" ${f.id===d.firmaId?'selected':''}>${esc(f.ad)}</option>`).join('')}</select>`)}</div>
   <div class="row2">${fld('Kendi danışanı olduğu uzman',`<select id="dd_sahip"><option value="">Yok (ofis danışanı)</option>${S.uzmanlar.map(u=>`<option value="${u.id}" ${u.id===d.sahipUzmanId?'selected':''}>${esc(u.ad)}</option>`).join('')}</select>`)}
