@@ -297,6 +297,10 @@ input[type="date"]::-webkit-date-and-time-value{text-align:left;margin:0}
 .telmsg.ok{color:var(--ok)}
 .telmsg.err{color:var(--bad)}
 .field input[aria-invalid="true"]{border-color:var(--bad)}
+.kdvrow{display:flex;gap:10px;align-items:center}
+.kdvrow input[type=number]{flex:1;min-width:0}
+.kdvchk{flex:none;border:1px solid var(--line);border-radius:10px;padding:0 12px;min-height:46px;background:var(--surface);font-weight:600}
+.kanal{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
 .cmsg{border-radius:10px;padding:10px 12px;font-size:.86rem;display:flex;flex-direction:column;gap:4px}
 .cmsg.ok{background:color-mix(in srgb,var(--ok) 12%,transparent);color:var(--ok);font-weight:600}
 .cmsg.err{background:color-mix(in srgb,var(--bad) 10%,transparent);color:var(--bad);font-weight:600}
@@ -474,7 +478,7 @@ function hesapla(brut,kdvOran,kdvDahil,ofisOran){
   const matrah=kdvDahil?brut/(1+k):brut;
   const tahsilat=kdvDahil?brut:brut*(1+k);
   const kdv=tahsilat-matrah;const ofis=matrah*(+ofisOran||0)/100;
-  return{tahsilat,kdv,matrah,ofis,uzman:matrah-ofis,kdvOran:+kdvOran||0};
+  return{tahsilat,kdv,matrah,ofis,uzman:matrah-ofis,kdvOran:+kdvOran||0,oran:+ofisOran||0};
 }
 
 const IC={
@@ -801,7 +805,7 @@ function seansCard(s,opt){opt=opt||{};
   let act='';
   if(fin){
     if(s.durum==='bekliyor')act=`${fs?`<button class="btn sm primary" data-act="firmaTamamla" data-id="${s.id}">Tamamlandı</button>`:`<button class="btn sm primary" data-act="tahsilat" data-id="${s.id}">${ic('wallet')}Tahsilat</button>`}<button class="btn sm" data-act="ertele" data-id="${s.id}">Ertele</button><button class="btn sm ghost" data-act="seansDuz" data-id="${s.id}">Düzenle</button><button class="btn sm ghost" data-act="iptalSor" data-id="${s.id}">İptal</button>${gecti(s)?`<span class="note" style="color:var(--warn)">${fs?'Tamamlanmadı':'Ödeme girilmedi'}</span>`:''}`;
-    else if(s.durum==='odendi')act=`${fs?'<span class="note">Firma kapsamında · danışandan ücret alınmadı</span>':`<span class="note num">${s.odeme.kanal} · Ofis ${TL(s.odeme.ofis)} · Uzman ${TL(s.odeme.uzman)} · KDV ${TL(s.odeme.kdv)}</span>`}<button class="btn sm" data-act="seansDuz" data-id="${s.id}">Düzenle</button>`;
+    else if(s.durum==='odendi')act=`${fs?'<span class="note">Firma kapsamında · danışandan ücret alınmadı</span>':`<span class="note num">${s.odeme.kanal} · ${s.odeme.kdvOran?`KDV'li (KDV ${TL(s.odeme.kdv)})`:"KDV'siz"} · Ofis %${s.odeme.oran??oran(s)} ${TL(s.odeme.ofis)} · Uzman ${TL(s.odeme.uzman)}</span>`}<button class="btn sm" data-act="seansDuz" data-id="${s.id}">Düzenle</button>`;
     else act=`<button class="btn sm ghost" data-act="geriAl" data-id="${s.id}">İptali geri al</button>`;
   }
   return`<article class="scard st-${s.durum} t-${TK[s.tur]}">
@@ -830,16 +834,20 @@ function vGorusmeler(){
   ${gunGrupla(list)}`}
 
 /* Tahsilat */
-function tahsilatSheet(id){const s=SE(id),d=D(s.danisanId),u=U(s.uzmanId);
+function tahsilatSheet(id){const s=SE(id),d=D(s.danisanId),u=U(s.uzmanId);const vo=oran(s);
   sheet('Tahsilat al',`<div class="secili"><div class="grow"><b>${esc(d.ad)}</b><span class="small muted">${fmtD(s.tarih)} ${s.saat} · ${esc(u.ad)} · ${s.tur}</span></div>${tchip(s.tur)}</div>
-  <div class="row2">${fld('Brüt ücret (₺)',`<input id="t_brut" type="number" inputmode="decimal" min="0" value="${s.ucret}" data-in="tCalc">`)}
-  ${fld('KDV oranı',`<select id="t_kdv" data-chg="tCalc">${[0,10,20].map(k=>`<option value="${k}" ${k==S.ayar.kdv?'selected':''}>%${k}${k===0?' (faturasız)':''}</option>`).join('')}</select>`)}</div>
-  <div><span class="lbl">Ödeme kanalı</span><div class="seg" style="margin-top:6px"><label><input type="radio" name="t_kanal" value="Nakit" checked>Nakit</label><label><input type="radio" name="t_kanal" value="Havale/EFT">Havale / EFT</label></div></div>
-  <div class="small muted">Komisyon: ${KAYNAK[s.kaynak]} · ofis payı %${s.kaynak==='kendi'?u.oranKendi:u.oranYonlendirme} · KDV ${S.ayar.kdvDahil?'ücrete dahil':'ücrete eklenir'}</div>
+  ${odemeAlanlari('t',s.ucret,true,vo,`${KAYNAK[s.kaynak]} için ${esc(u.ad)} varsayılanı %${vo}`,'Nakit')}
   <div class="calc" id="t_prev"></div>`,
   `<button class="btn" data-act="kapat">Vazgeç</button><button class="btn primary" data-act="tahsilatKaydet" data-id="${id}">Tahsilatı kapat</button>`);
   A._tid=id;A.tCalc()}
-function tHes(){const s=SE(A._tid);return hesapla(val('t_brut'),val('t_kdv'),S.ayar.kdvDahil,oran(s))}
+function odemeAlanlari(p,tutar,kdvli,oranV,ipucu,kanal){return`
+  <div class="field"><span>Alınan ücret (₺)</span><div class="kdvrow"><input id="${p}_brut" type="number" inputmode="decimal" min="0" value="${tutar}" data-in="${p}Calc"><label class="chk kdvchk"><input type="checkbox" id="${p}_kdvli" ${kdvli?'checked':''} data-chg="${p}Calc"> KDV'li</label></div>
+    <small class="muted" id="${p}_kdvnot"></small></div>
+  <div class="field"><span>Ofis payı (%)</span><input id="${p}_oran" type="number" inputmode="decimal" min="0" max="100" value="${oranV}" data-in="${p}Calc" data-varsayilan="${oranV}"><small class="muted" id="${p}_orannot">${ipucu}</small></div>
+  <div class="kanal"><span class="lbl">Ödeme kanalı</span><div class="seg"><label><input type="radio" name="${p}_kanal" value="Nakit" ${kanal!=='Havale/EFT'?'checked':''}>Nakit</label><label><input type="radio" name="${p}_kanal" value="Havale/EFT" ${kanal==='Havale/EFT'?'checked':''}>Havale / EFT</label></div></div>`}
+function odemeHes(p){return hesapla(val(p+'_brut'),chk(p+'_kdvli')?S.ayar.kdv:0,true,Math.min(100,Math.max(0,+val(p+'_oran')||0)))}
+function calcHtml(c,p){const n=$('#'+p+'_kdvnot');if(n)n.textContent=c.kdvOran?`İşaretli: tutarın içinde %${c.kdvOran} KDV var, hak ediş KDV düşülerek hesaplanır.`:`İşaretsiz: tutar KDV'siz, hak ediş tutarın tamamı üzerinden hesaplanır.`;
+  return`<div><span>Alınan ücret</span><b>${TL(c.tahsilat)}</b></div><div><span>${c.kdvOran?`KDV (%${c.kdvOran})`:'KDV'}</span><span>${c.kdvOran?'− '+TL(c.kdv):'Yok'}</span></div><div><span>KDV hariç tutar (matrah)</span><span>${TL(c.matrah)}</span></div><div><span>Ofis payı (%${c.oran})</span><span>${TL(c.ofis)}</span></div><div class="tot"><span>Uzman hak edişi (%${100-c.oran})</span><span>${TL(c.uzman)}</span></div>`}
 
 /* ============ ASİSTAN: Takvim ============ */
 function vTakvim(){
@@ -1173,12 +1181,12 @@ function uzDuz(id){const u=id?U(id):{ad:'',tel:'',email:'',sifre:'',alanlar:['Ye
   ${id&&u.aktif?(()=>{const n=S.seanslar.filter(s=>s.uzmanId===id&&s.durum==='bekliyor'&&!gecti(s)).length;return n?`<div class="small muted">${n} aktif seansı olduğu için şu an pasife alınamaz.</div>`:''})():''}`,
   `${id?`<button class="btn ${u.aktif?'danger':''}" data-act="uzPasif" data-id="${id}">${u.aktif?'Pasife al':'Yeniden aktifleştir'}</button>`:''}<button class="btn" data-act="kapat">Vazgeç</button><button class="btn primary" data-act="uzKaydet" data-id="${id||''}">Kaydet</button>`)}
 
-function vFiyat(){const ex=hesapla(S.fiyat['Yetişkin'],S.ayar.kdv,S.ayar.kdvDahil,50);
+function vFiyat(){const ex=hesapla(S.fiyat['Yetişkin'],S.ayar.kdv,true,50);
   return`<div class="page-head"><div><h1>Hizmet türleri ve fiyat</h1><p>Merkez standart taban seans ücretleri. Randevu sırasında asistan tutarı değiştirebilir.</p></div></div>
   <div class="form-grid"><div class="card"><h2>Taban seans ücretleri</h2>${TURLER.map(t=>`<div class="row2" style="align-items:center"><span>${tchip(t)} <span class="small muted">seansı</span></span>${fld('Ücret (₺)',`<input id="fy_${TK[t]}" type="number" min="0" value="${S.fiyat[t]}">`)}</div>`).join('')}</div>
-  <div class="card"><h2>KDV</h2><div><span class="lbl">Varsayılan KDV oranı</span><div class="seg" style="margin-top:6px">${[0,10,20].map(k=>`<label><input type="radio" name="fy_kdv" value="${k}" ${S.ayar.kdv==k?'checked':''}>%${k}</label>`).join('')}</div></div>
-  <div><span class="lbl">Fiyatlar</span><div class="seg" style="margin-top:6px"><label><input type="radio" name="fy_dahil" value="1" ${S.ayar.kdvDahil?'checked':''}>KDV dahil</label><label><input type="radio" name="fy_dahil" value="0" ${S.ayar.kdvDahil?'':'checked'}>KDV hariç</label></div></div>
-  <div class="calc"><b>Örnek: ${TL(S.fiyat['Yetişkin'])} yetişkin seansı, %50 ofis payı</b><div><span>Danışandan tahsil edilen</span><span>${TL(ex.tahsilat)}</span></div><div><span>KDV (%${S.ayar.kdv})</span><span>${TL(ex.kdv)}</span></div><div><span>Matrah</span><span>${TL(ex.matrah)}</span></div><div><span>Ofis payı</span><span>${TL(ex.ofis)}</span></div><div class="tot"><span>Uzman hak edişi</span><span>${TL(ex.uzman)}</span></div></div></div>
+  <div class="card"><h2>KDV</h2>${fld('KDV oranı (%)',`<input id="fy_kdv" type="number" min="0" max="100" value="${S.ayar.kdv}">`)}
+  <span class="small muted">Tüm tahsilatlarda bu oran kullanılır; asistan oran seçmez. Tahsilatta "KDV'li" işaretlenirse KDV tutarın içinden ayrılır, işaretlenmezse tutar KDV'siz sayılır. Uzman hak edişi her zaman KDV hariç tutar üzerinden hesaplanır.</span>
+  <div class="calc"><b>Örnek: ${TL(S.fiyat['Yetişkin'])} KDV'li yetişkin seansı, %50 ofis payı</b><div><span>Danışandan tahsil edilen</span><span>${TL(ex.tahsilat)}</span></div><div><span>KDV (%${S.ayar.kdv})</span><span>${TL(ex.kdv)}</span></div><div><span>Matrah</span><span>${TL(ex.matrah)}</span></div><div><span>Ofis payı</span><span>${TL(ex.ofis)}</span></div><div class="tot"><span>Uzman hak edişi</span><span>${TL(ex.uzman)}</span></div></div></div>
   <div class="fa"><button class="btn primary lg" data-act="fiyatKaydet">Fiyatları kaydet</button></div></div>`}
 
 function vFirmalar(){const[b,e]=(()=>{const d=parse(TODAY);return[ds(new Date(d.getFullYear(),d.getMonth(),1)),ds(new Date(d.getFullYear(),d.getMonth()+1,0))]})();
@@ -1254,18 +1262,20 @@ function seansDuz(id){const s=SE(id),d=D(s.danisanId),o=s.odeme;A._sid=id;
   <div class="row2">${fld('Uzman',`<select id="sd_uz" data-chg="sdCalc">${uz.map(u=>`<option value="${u.id}" ${u.id===s.uzmanId?'selected':''}>${esc(u.ad)}${u.aktif?'':' (pasif)'}</option>`).join('')}</select>`)}
   ${fld('Seans türü',`<select id="sd_tur">${TURLER.map(t=>`<option ${t===s.tur?'selected':''}>${t}</option>`).join('')}</select>`)}</div>
   <div class="row2">${fld('Kaynak',`<select id="sd_kaynak" data-chg="sdKaynak">${Object.entries(KAYNAK).map(([k,l])=>`<option value="${k}" ${s.kaynak===k?'selected':''} ${k==='firma'&&!d.firmaId?'disabled':''}>${l}${k==='firma'&&d.firmaId&&F(d.firmaId)?' · '+esc(F(d.firmaId).ad):''}</option>`).join('')}</select>`)}
-  ${fld(o?'Brüt ücret (₺)':'Ücret (₺)',`<input id="sd_ucret" type="number" inputmode="decimal" min="0" value="${s.ucret}" data-in="sdCalc" ${s.kaynak==='firma'?'disabled':''}>`)}</div>
+  ${fld(o?'Brüt ücret (₺)':'Ücret (₺)',`<input id="sd_ucret" type="number" inputmode="decimal" min="0" value="${s.ucret}" data-in="sdCalc" ${s.kaynak==='firma'||o?'disabled':''}>`)}</div>
+  ${o&&s.kaynak!=='firma'?'<span class="small muted" style="margin-top:-8px">Ödenmiş seansta tutar aşağıdaki tahsilat bilgilerinden değiştirilir.</span>':''}
   ${s.tur==='Çocuk'||s.tur==='Ergen'?`<label class="chk"><input type="checkbox" id="sd_eb" ${s.sadeceEbeveyn?'checked':''}> Sadece ebeveyn görüşmesi</label>`:''}
   ${fld('Not',`<textarea id="sd_not">${esc(s.not||'')}</textarea>`)}
   ${o?`<div class="sub-box"><span class="lbl">Tahsilat bilgileri</span>
-    <div class="row2">${fld('KDV oranı',`<select id="sd_kdv" data-chg="sdCalc">${[0,10,20].map(k=>`<option value="${k}" ${k==o.kdvOran?'selected':''}>%${k}${k===0?' (faturasız)':''}</option>`).join('')}</select>`)}${fld('Ödeme tarihi',`<input id="sd_ot" type="date" value="${o.tarih||s.tarih}">`)}</div>
-    <div class="seg" style="align-self:flex-start"><label><input type="radio" name="sd_kanal" value="Nakit" ${o.kanal!=='Havale/EFT'?'checked':''}>Nakit</label><label><input type="radio" name="sd_kanal" value="Havale/EFT" ${o.kanal==='Havale/EFT'?'checked':''}>Havale / EFT</label></div>
+    ${odemeAlanlari('sd2',s.ucret,!!o.kdvOran,o.oran??oran(s),`Uzman varsayılanı %${oran(s)}`,o.kanal)}
+    ${fld('Ödeme tarihi',`<input id="sd_ot" type="date" value="${o.tarih||s.tarih}">`)}
     <div class="calc" id="sd_prev"></div>
     <div><button class="btn sm danger" data-act="tahsilatGeri" data-id="${id}">Tahsilatı geri al (bekliyor yap)</button></div></div>`:''}
   <div id="sd_msg" class="cmsg" hidden></div>
   ${gec.length?`<div><h3 style="margin-bottom:6px">Değişiklik geçmişi</h3><div class="hist">${gec.map(g=>`<div><b class="small">${new Date(g.z).toLocaleDateString('tr-TR',{day:'numeric',month:'short'})}</b><span class="small">${esc(g.i)}</span><span class="small muted">${esc(g.k)}</span></div>`).join('')}</div></div>`:''}`,
   `<button class="btn" data-act="kapat">Vazgeç</button><button class="btn primary" data-act="seansKaydet">Değişiklikleri kaydet</button>`);A.sdCalc()}
-function sdHes(){const u=U(val('sd_uz'));return hesapla(val('sd_ucret'),val('sd_kdv'),S.ayar.kdvDahil,val('sd_kaynak')==='kendi'?u.oranKendi:u.oranYonlendirme)}
+function sdVars(){const u=U(val('sd_uz'));return val('sd_kaynak')==='kendi'?u.oranKendi:u.oranYonlendirme}
+function sdHes(){return odemeHes('sd2')}
 
 /* ============ Danışan düzenleme ============ */
 function danisanDuz(id){const d=D(id);const p=x=>x||{ad:'',tel:''};const es=p(d.es),an=p(d.anne),ba=p(d.baba);
@@ -1367,18 +1377,20 @@ const A={
   sdCalc(){const s=SE(A._sid);const m=$('#sd_msg');
     if(val('sd_uz')!==s.uzmanId){const e=S.seanslar.filter(x=>x.id!==s.id&&x.durum!=='iptal'&&x.tarih===s.tarih&&x.saat===s.saat&&x.uzmanId===val('sd_uz'));
       m.hidden=!e.length;m.className='cmsg err';m.innerHTML=e.length?`<span>• Seçilen uzmanın bu saatte başka seansı var (${esc(D(e[0].danisanId).ad)}).</span>`:''}else m.hidden=true;
-    if(!s.odeme)return;const c=sdHes();$('#sd_prev').innerHTML=`<div><span>Tahsil edilen</span><b>${TL(c.tahsilat)}</b></div><div><span>KDV (%${c.kdvOran})</span><span>${TL(c.kdv)}</span></div><div><span>Ofis payı</span><span>${TL(c.ofis)}</span></div><div class="tot"><span>Uzman payı</span><span>${TL(c.uzman)}</span></div>${Math.abs(c.tahsilat-s.odeme.tahsilat)>=1||Math.abs(c.uzman-s.odeme.uzman)>=1?`<div class="small" style="color:var(--warn)"><span>Önceki: ${TL(s.odeme.tahsilat)} · uzman ${TL(s.odeme.uzman)}</span></div>`:''}`},
+    if(!s.odeme||!$('#sd2_brut'))return;const ob=$('#sd2_oran');const dv=sdVars();if(!ob.dataset.touched&&+ob.dataset.varsayilan!==dv&&(val('sd_uz')!==s.uzmanId||val('sd_kaynak')!==s.kaynak)){ob.value=dv;ob.dataset.varsayilan=dv}$('#sd2_orannot').textContent=`Uzman varsayılanı %${dv}`;
+    const c=sdHes();$('#sd_prev').innerHTML=calcHtml(c,'sd2')+`${Math.abs(c.tahsilat-s.odeme.tahsilat)>=1||Math.abs(c.uzman-s.odeme.uzman)>=1?`<div class="small" style="color:var(--warn)"><span>Önceki: ${TL(s.odeme.tahsilat)} · uzman ${TL(s.odeme.uzman)}</span></div>`:''}`},
   seansKaydet(){const s=SE(A._sid);if(!$('#sd_msg').hidden){toast('Uzman çakışması var.',1);return}
-    const uc=val('sd_kaynak')==='firma'?0:+val('sd_ucret');
+    const uc=val('sd_kaynak')==='firma'?0:+(s.odeme&&$('#sd2_brut')?val('sd2_brut'):val('sd_ucret'));
     const yk=val('sd_kaynak');const dd=D(s.danisanId);
-    if(yk!=='firma'&&!(+val('sd_ucret')>0)){toast('Ücretli seans için ücret girin.',1);return}
+    if(yk!=='firma'&&!(+(s.odeme&&$('#sd2_brut')?val('sd2_brut'):val('sd_ucret'))>0)){toast('Ücretli seans için ücret girin.',1);return}
+    if(s.odeme&&$('#sd2_oran')&&!(+val('sd2_oran')>=0&&+val('sd2_oran')<=100)){toast('Ofis payı 0 ile 100 arasında olmalı.',1);return}
     const deg=[];const eski={uz:s.uzmanId,uc:s.ucret,k:s.kaynak,t:s.tur,o:s.odeme&&{...s.odeme}};
     s.uzmanId=val('sd_uz');s.tur=val('sd_tur');s.kaynak=val('sd_kaynak');s.firmaId=s.kaynak==='firma'?dd.firmaId:null;s.ucret=uc;s.not=val('sd_not');if($('#sd_eb'))s.sadeceEbeveyn=chk('sd_eb');
     if(eski.uz!==s.uzmanId)deg.push(`uzman ${U(eski.uz).ad} → ${U(s.uzmanId).ad}`);if(eski.k!==s.kaynak)deg.push(`kaynak ${KAYNAK[eski.k]} → ${KAYNAK[s.kaynak]}`);if(eski.t!==s.tur)deg.push(`tür ${eski.t} → ${s.tur}`);
     if(s.odeme&&s.kaynak==='firma'){s.odeme=SIFIR(val('sd_ot')||s.odeme.tarih)}
-    else if(s.odeme){const c=sdHes();const kanal=document.querySelector('input[name="sd_kanal"]:checked').value;
-      s.odeme={...c,kanal,tarih:val('sd_ot')||s.odeme.tarih};
-      if(Math.abs(c.tahsilat-eski.o.tahsilat)>=1)deg.push(`tahsilat ${TL(eski.o.tahsilat)} → ${TL(c.tahsilat)}`);if(kanal!==eski.o.kanal)deg.push(`kanal ${eski.o.kanal} → ${kanal}`);if(c.kdvOran!==eski.o.kdvOran)deg.push(`KDV %${eski.o.kdvOran} → %${c.kdvOran}`)}
+    else if(s.odeme){const c=sdHes();const kanal=document.querySelector('input[name="sd2_kanal"]:checked').value;
+      s.odeme={...c,kanal,tarih:val('sd_ot')||s.odeme.tarih};s.ucret=+val('sd2_brut');if(c.oran!==eski.o.oran)deg.push(`ofis payı %${eski.o.oran??'-'} → %${c.oran}`);
+      if(Math.abs(c.tahsilat-eski.o.tahsilat)>=1)deg.push(`tahsilat ${TL(eski.o.tahsilat)} → ${TL(c.tahsilat)}`);if(kanal!==eski.o.kanal)deg.push(`kanal ${eski.o.kanal} → ${kanal}`);if(c.kdvOran!==eski.o.kdvOran)deg.push(c.kdvOran?"KDV'siz → KDV'li":"KDV'li → KDV'siz")}
     else if(eski.uc!==uc)deg.push(`ücret ${TL(eski.uc)} → ${TL(uc)}`);
     if(deg.length)iz(s,'Düzenlendi: '+deg.join(', '));kapat();commit();toast(deg.length?'Seans güncellendi.':'Değişiklik yapılmadı.');pasifDon()},
   danisanDuz(d){danisanDuz(d.id)},
@@ -1412,9 +1424,12 @@ const A={
   gDurum(d){UI.gf.durum=d.v;render()},
   gUzman(d,el){UI.gf.uzman=el.value;render()},
   tahsilat(d){tahsilatSheet(d.id)},
-  tCalc(){const c=tHes();$('#t_prev').innerHTML=`<div><span>Tahsil edilecek</span><b>${TL(c.tahsilat)}</b></div><div><span>KDV (%${c.kdvOran})</span><span>${TL(c.kdv)}</span></div><div><span>Matrah</span><span>${TL(c.matrah)}</span></div><div><span>Ofis payı</span><span>${TL(c.ofis)}</span></div><div class="tot"><span>Uzman payı</span><span>${TL(c.uzman)}</span></div>`},
-  tahsilatKaydet(d){const s=SE(d.id);const c=tHes();if(!(c.tahsilat>0)){toast('Geçerli bir tutar girin.',1);return}
-    s.ucret=+val('t_brut');s.durum='odendi';s.odeme={...c,kanal:document.querySelector('input[name="t_kanal"]:checked').value,tarih:TODAY};iz(s,`Tahsilat ${TL(c.tahsilat)} · ${s.odeme.kanal}`);kapat();commit();toast(`Tahsilat kapatıldı · ${TL(c.tahsilat)}`)},
+  sd2Calc(d,el){if(el&&el.id==='sd2_oran')el.dataset.touched='1';A.sdCalc()},
+  tCalc(){const c=odemeHes('t');$('#t_prev').innerHTML=calcHtml(c,'t');const o=$('#t_oran');$('#t_orannot').style.color=+o.value!==+o.dataset.varsayilan?'var(--warn)':'';},
+  tahsilatKaydet(d){const s=SE(d.id);const c=odemeHes('t');if(!(c.tahsilat>0)){toast('Geçerli bir tutar girin.',1);return}
+    const ov=+val('t_oran');if(!(ov>=0&&ov<=100)){toast('Ofis payı 0 ile 100 arasında olmalı.',1);return}
+    s.ucret=+val('t_brut');s.durum='odendi';s.odeme={...c,kanal:document.querySelector('input[name="t_kanal"]:checked').value,tarih:TODAY};
+    iz(s,`Tahsilat ${TL(c.tahsilat)} · ${c.kdvOran?"KDV'li":"KDV'siz"} · ofis %${c.oran}${c.oran!==oran(s)?` (varsayılan %${oran(s)})`:''} · ${s.odeme.kanal}`);kapat();commit();toast(`Tahsilat kapatıldı · ${TL(c.tahsilat)}`)},
   tahsilatGeri(d){const s=SE(d.id);iz(s,`Tahsilat geri alındı (${TL(s.odeme?s.odeme.tahsilat:0)})`);s.durum='bekliyor';s.odeme=null;kapat();commit();toast('Tahsilat geri alındı.')},
   ertele(d){const s=SE(d.id);if(s.durum!=='bekliyor'){toast(s.durum==='odendi'?'Tahsilatı alınmış seans ertelenemez.':'İptal edilmiş seans ertelenemez.',1);return}const rooms=S.odalar.filter(o=>o.subeId===s.subeId);A._eid=d.id;
     sheet('Seansı ertele',`<div class="secili"><div class="grow"><b>${esc(D(s.danisanId).ad)}</b><span class="small muted">Şu an: ${fmtD(s.tarih)} ${s.saat} · ${esc(O(s.odaId).ad)}</span></div></div>
@@ -1531,7 +1546,7 @@ const A={
     if(d.id){const u=U(d.id);Object.assign(u,x);subeIds.forEach(s=>u.musait[s]=u.musait[s]||{})}
     else{const musait={};subeIds.forEach(s=>{musait[s]={};for(let g=1;g<=6;g++)musait[s][g]=subeIds.length===1||((g%2?subeIds[0]:subeIds[1])===s)?SAATLER.filter(h=>h>='10:00'&&h<'21:00'):[]});S.uzmanlar.push({id:uid('u'),aktif:true,musait,izinler:[],...x})}
     kapat();commit();toast('Uzman kaydedildi.')},
-  fiyatKaydet(){TURLER.forEach(t=>{const v=+val('fy_'+TK[t]);if(v>=0)S.fiyat[t]=v});S.ayar.kdv=+document.querySelector('input[name="fy_kdv"]:checked').value;S.ayar.kdvDahil=document.querySelector('input[name="fy_dahil"]:checked').value==='1';commit();toast('Fiyat politikası kaydedildi.')},
+  fiyatKaydet(){TURLER.forEach(t=>{const v=+val('fy_'+TK[t]);if(v>=0)S.fiyat[t]=v});{const k=+val('fy_kdv');if(!(k>=0&&k<=100)){toast('KDV oranı 0 ile 100 arasında olmalı.',1);return}S.ayar.kdv=k;S.ayar.kdvDahil=true}commit();toast('Fiyat politikası kaydedildi.')},
   firmaDuz(d){firmaDuz(d.id)},
   fKisit(){$('#f_uzlar').hidden=document.querySelector('input[name="f_kisit"]:checked').value==='tum'},
   firmaKaydet(d){const ad=val('f_ad');if(!ad){toast('Firma adı gerekli.',1);return}
