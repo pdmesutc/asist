@@ -702,13 +702,14 @@ if(S.v<6){const y=S.ayar.yonetici;y.email=y.email||(y.kullanici&&y.kullanici.inc
 let UI={rol:null,subeId:'pen',uzmanId:'u1',view:null,gozlem:false,per:{tip:'gun',ref:TODAY}};
 try{const r=localStorage.getItem(UIKEY);if(r){const o=JSON.parse(r);if(!('hatirla' in o))o.rol=null;UI=Object.assign(UI,o,{per:{tip:'gun',ref:TODAY}})}}catch(e){}
 try{const r=sessionStorage.getItem(UIKEY);if(r){const o=JSON.parse(r);if(o.rol)Object.assign(UI,o)}}catch(e){}
+{const h=(location.hash||'').slice(1);if(['yonetici','asistan','psikolog'].includes(h))UI.girisRol=h}
 let M={};
 function idx(){M={d:new Map(S.danisanlar.map(x=>[x.id,x])),u:new Map(S.uzmanlar.map(x=>[x.id,x])),o:new Map(S.odalar.map(x=>[x.id,x])),s:new Map(S.seanslar.map(x=>[x.id,x])),f:new Map(S.firmalar.map(x=>[x.id,x])),b:new Map(S.subeler.map(x=>[x.id,x]))};_cnt=null;_sorted=null}
 let _cnt=null,_sorted=null;
 const D=id=>M.d.get(id),U=id=>M.u.get(id),O=id=>M.o.get(id),SE=id=>M.s.get(id),F=id=>M.f.get(id),B=id=>M.b.get(id);
 function iz(s,islem){(s.gecmis=s.gecmis||[]).push({z:new Date().toISOString(),k:UI.gozlem?'Yönetici (gözlem)':rolAd[aktifRol()]||'',i:islem})}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
-function saveUI(){const o={rol:UI.rol,subeId:UI.subeId,uzmanId:UI.uzmanId,view:UI.view,hatirla:!!UI.hatirla};
+function saveUI(){const o={rol:UI.rol,subeId:UI.subeId,uzmanId:UI.uzmanId,view:UI.view,hatirla:!!UI.hatirla,girisRol:UI.girisRol};
   try{localStorage.setItem(UIKEY,JSON.stringify(UI.hatirla?o:{...o,rol:null}))}catch(e){}try{sessionStorage.setItem(UIKEY,JSON.stringify(o))}catch(e){}}
 function oturumGecerli(){if(UI.rol==='psikolog'){const u=U(UI.uzmanId);return!!(u&&u.aktif)}if(UI.rol==='asistan')return!!B(UI.subeId);return UI.rol==='yonetici'}
 function commit(){save();idx();render()}
@@ -840,7 +841,7 @@ function render(){
 const ROL_AD={yonetici:'Yönetici',asistan:'Asistan',psikolog:'Psikolog'};
 const EPOSTA_RE=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function vLogin(){
-  const demo=[[S.ayar.yonetici.email,'Yönetici']].concat(S.subeler.filter(b=>b.asistan).map(b=>[b.asistan.email,b.ad+' asistanı'])).concat(S.uzmanlar.filter(u=>u.aktif).slice(0,3).map(u=>[u.email,u.ad]));
+  const demo=[['yonetici',S.ayar.yonetici.email,'Yönetici']].concat(S.subeler.filter(b=>b.asistan).map(b=>['asistan',b.asistan.email,b.ad+' asistanı'])).concat(S.uzmanlar.filter(u=>u.aktif).slice(0,3).map(u=>['psikolog',u.email,u.ad]));
   return`<div class="auth">
   <aside class="auth-side"><div class="auth-side-in">${LOGO("full",40)}
     <div><h2 class="auth-hl no-tc">Merkezinizin günlük işleri, tek ekranda.</h2>
@@ -848,27 +849,27 @@ function vLogin(){
     <a class="auth-back" href="anasayfa.html">← Tanıtım sayfasına dön</a></div></aside>
   <main class="auth-main"><form class="auth-card" data-submit="girisYap" novalidate autocomplete="on">
     <div class="auth-mlogo">${LOGO("full",36)}</div>
-    <div><h1>Giriş Yap</h1><p class="muted" style="margin:6px 0 0">Yönetici, asistan ve psikologlar aynı ekrandan giriş yapar. Paneliniz hesabınıza göre açılır.</p></div>
+    <div><h1>Giriş Yap</h1><p class="muted" style="margin:6px 0 0">Panelinizi seçin, e-posta adresiniz ve şifrenizle giriş yapın.</p></div>
+    <div class="seg auth-seg" role="radiogroup" aria-label="Panel">${[['asistan','Asistan'],['psikolog','Psikolog'],['yonetici','Yönetici']].map(([k,l])=>`<label><input type="radio" name="g_rol" value="${k}" ${k===(UI.girisRol||'asistan')?'checked':''} data-chg="girisRol">${l}</label>`).join('')}</div>
     <label class="field"><span>E-posta</span><input id="g_k" name="email" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" inputmode="email" placeholder="E-posta adresiniz"></label>
     <label class="field"><span>Şifre</span><div class="pw"><input id="g_s" name="password" type="password" autocomplete="current-password" placeholder="Şifreniz"><button type="button" class="pw-btn" data-act="sifreGoster" aria-label="Şifreyi göster">${ic('eye')}</button></div></label>
     <div class="auth-row"><label class="chk"><input type="checkbox" id="g_hatirla" ${UI.hatirla?'checked':''}> Beni hatırla</label><button type="button" class="linkbtn" data-act="sifreUnut">Şifremi unuttum</button></div>
     <div id="g_hata" class="cmsg err" role="alert" hidden></div>
     <button type="submit" class="btn primary lg block" id="g_btn">Giriş Yap</button>
     <details class="auth-demo"><summary>Demo hesapları</summary><div class="auth-demo-in"><span class="small muted">Bu sürüm tanıtım amaçlıdır. Bir hesaba dokunun, bilgiler doldurulsun. Şifrelerin hepsi <b>demo1234</b>.</span>
-      ${demo.map(([k,ad])=>`<button type="button" class="auth-demo-btn" data-act="demoDoldur" data-k="${esc(k)}"><b>${esc(ad)}</b><span>${esc(k)}</span></button>`).join('')}</div></details>
+      ${demo.map(([r,k,ad])=>`<button type="button" class="auth-demo-btn" data-act="demoDoldur" data-r="${r}" data-k="${esc(k)}"><b>${esc(ad)} <small class="muted">· ${ROL_AD[r]}</small></b><span>${esc(k)}</span></button>`).join('')}</div></details>
     <a class="auth-back-m" href="anasayfa.html">← Tanıtım sayfasına dön</a>
   </form></main></div>`}
-function hesapBul(k){k=low(String(k||'').trim());if(!k)return null;const y=S.ayar.yonetici;
-  if(low(y.email)===k)return{rol:'yonetici',ad:'Merkez Yönetim',obj:y};
-  const b=S.subeler.find(b=>b.asistan&&low(b.asistan.email)===k);if(b)return{rol:'asistan',subeId:b.id,ad:b.ad+' Şubesi',obj:b.asistan};
-  const u=S.uzmanlar.find(u=>low(u.email)===k);return u?{rol:'psikolog',uzmanId:u.id,ad:u.ad,obj:u,pasif:!u.aktif}:null}
+function hesapBul(rol,k){k=low(String(k||'').trim());if(!k)return null;
+  if(rol==='yonetici'){const y=S.ayar.yonetici;return low(y.email)===k?{rol,ad:'Merkez Yönetim',obj:y}:null}
+  if(rol==='asistan'){const b=S.subeler.find(b=>b.asistan&&low(b.asistan.email)===k);return b?{rol,subeId:b.id,ad:b.ad+' Şubesi',obj:b.asistan}:null}
+  const u=S.uzmanlar.find(u=>low(u.email)===k);return u?{rol,uzmanId:u.id,ad:u.ad,obj:u,pasif:!u.aktif}:null}
 function aktifHesap(){if(UI.rol==='yonetici'||UI.gozlem)return{obj:S.ayar.yonetici,ad:'Merkez Yönetim',kul:S.ayar.yonetici.email,rol:'Yönetici'};
   if(UI.rol==='asistan'){const b=B(UI.subeId);return{obj:b.asistan,ad:b.ad+' Şubesi',kul:b.asistan.email,rol:'Asistan'}}
   const u=U(UI.uzmanId);return{obj:u,ad:u.ad,kul:u.email,rol:'Psikolog'}}
-function kullaniciCakisma(k,haric){k=low(String(k||'').trim());if(!k)return'';const y=S.ayar.yonetici;
-  if(haric!==y&&low(y.email)===k)return'yönetici hesabında';
-  const b=S.subeler.find(b=>b.asistan&&b.asistan!==haric&&low(b.asistan.email)===k);if(b)return`${b.ad} şubesi asistan hesabında`;
-  const u=S.uzmanlar.find(u=>u!==haric&&low(u.email)===k);if(u)return`${u.ad} hesabında`;return''}
+function kullaniciCakisma(k,haric,rol){k=low(String(k||'').trim());if(!k)return'';
+  if(rol==='asistan'){const b=S.subeler.find(b=>b.asistan&&b.asistan!==haric&&low(b.asistan.email)===k);return b?`${b.ad} şubesi asistan hesabında`:''}
+  if(rol==='psikolog'){const u=S.uzmanlar.find(u=>u!==haric&&low(u.email)===k);return u?`${u.ad} hesabında`:''}return''}
 
 /* ============ ASİSTAN: Görüşmeler ============ */
 function seansCard(s,opt){opt=opt||{};
@@ -1502,15 +1503,16 @@ const A={
     h.obj.sifre=y;kapat();commit();toast('Şifreniz güncellendi.')},
   sifreGoster(d,el){const i=$('#g_s');const g=i.type==='password';i.type=g?'text':'password';el.setAttribute('aria-label',g?'Şifreyi gizle':'Şifreyi göster');el.style.color=g?'var(--accent)':''},
   sifreUnut(){const e=$('#g_hata');e.hidden=false;e.className='cmsg';e.style.background='var(--surface-2)';e.style.color='var(--ink)';e.innerHTML='<span>Şifrenizi merkez yöneticiniz sıfırlayabilir. Asistan şifreleri Şubeler sayfasından, psikolog şifreleri Uzmanlar sayfasından değiştirilir.</span>'},
-  demoDoldur(d){$('#g_k').value=d.k;$('#g_s').value='demo1234';$('#g_hata').hidden=true;$('#g_btn').focus()},
+  girisRol(d,el){UI.girisRol=el.value;$('#g_hata').hidden=true;$('#g_k').focus()},
+  demoDoldur(d){const r=document.querySelector(`input[name="g_rol"][value="${d.r}"]`);if(r){r.checked=true;UI.girisRol=d.r}$('#g_k').value=d.k;$('#g_s').value='demo1234';$('#g_hata').hidden=true;$('#g_btn').focus()},
   girisYap(){const e=$('#g_hata');const goster=m=>{e.hidden=false;e.className='cmsg err';e.removeAttribute('style');e.innerHTML=`<span>${m}</span>`};
     const now=Date.now();if(A._kilit&&now<A._kilit){goster(`Çok fazla hatalı deneme. ${Math.ceil((A._kilit-now)/1000)} saniye sonra tekrar deneyin.`);return}
     const k=val('g_k'),sf=$('#g_s').value;
     if(!k||!sf){goster('E-posta ve şifre gerekli.');(!k?$('#g_k'):$('#g_s')).focus();return}
     if(!EPOSTA_RE.test(k)){goster('Geçerli bir e-posta adresi girin.');$('#g_k').focus();return}
-    const h=hesapBul(k);
+    const rol=(document.querySelector('input[name="g_rol"]:checked')||{}).value||'asistan';UI.girisRol=rol;const h=hesapBul(rol,k);
     if(!h||h.obj.sifre!==sf){A._hata=(A._hata||0)+1;if(A._hata>=5){A._kilit=now+30000;A._hata=0}goster('E-posta veya şifre hatalı.');$('#g_s').select();return}
-    if(h.pasif){goster('Hesabınız pasif durumda. Merkez yöneticinize başvurun.');return}
+    if(h.pasif){A._hata=(A._hata||0)+1;goster('E-posta veya şifre hatalı.');return}
     A._hata=0;UI.hatirla=chk('g_hatirla');UI.rol=h.rol;UI.gozlem=false;if(h.subeId)UI.subeId=h.subeId;if(h.uzmanId)UI.uzmanId=h.uzmanId;
     UI.view=null;UI.per={tip:'gun',ref:TODAY};UI._ozetSet=0;UI._hkSet=0;render();scrollTo(0,0);toast(`Hoş geldiniz, ${h.ad} · ${ROL_AD[h.rol]} paneli.`)},
   cikis(){UI.rol=null;UI.gozlem=false;kapat();saveUI();try{location.hash=''}catch(e){}render();toast('Çıkış yapıldı.')},
@@ -1631,7 +1633,7 @@ const A={
     if(x.acilis>=x.kapanis){toast('Kapanış saati açılıştan sonra olmalı.',1);return}
     const ak=val('sb_ak'),as=val('sb_as');if(!EPOSTA_RE.test(ak)){toast('Asistan için geçerli bir e-posta girin.',1);$('#sb_ak').focus();return}
     if(as.length<6){toast('Asistan şifresi en az 6 karakter olmalı.',1);return}
-    {const eski=d.id?B(d.id).asistan:null;const c=kullaniciCakisma(ak,eski);if(c){toast(`Bu e-posta ${c} kullanılıyor.`,1);return}}
+    {const eski=d.id?B(d.id).asistan:null;const c=kullaniciCakisma(ak,eski,'asistan');if(c){toast(`Bu e-posta ${c} kullanılıyor.`,1);return}}
     x.asistan={email:ak,sifre:as};
     if(d.id)Object.assign(B(d.id),x);else S.subeler.push({id:uid('b'),...x});kapat();commit();toast('Şube kaydedildi.')},
   odaDuz(d){const o=d.id?O(d.id):{ad:'',tur:'Yetişkin Odası'};
@@ -1648,7 +1650,7 @@ const A={
     if(!ad||!alanlar.length||!subeIds.length){toast('Ad, en az bir alan ve bir şube seçin.',1);return}
     {const h=telHata([['u_tel','Uzman telefonu',true]]);if(h){toast(h,1);return}}
     {const em=val('u_email');if(!EPOSTA_RE.test(em)){toast('Giriş için geçerli bir e-posta girin.',1);return}
-     const c=kullaniciCakisma(em,d.id?U(d.id):null);if(c){toast(`Bu e-posta ${c} kullanılıyor.`,1);return}
+     const c=kullaniciCakisma(em,d.id?U(d.id):null,'psikolog');if(c){toast(`Bu e-posta ${c} kullanılıyor.`,1);return}
      if(val('u_sifre').length<6){toast('Giriş şifresi en az 6 karakter olmalı.',1);return}}
     const x={ad,tel:val('u_tel'),email:val('u_email'),sifre:val('u_sifre'),alanlar,subeIds,oranKendi:Math.min(100,Math.max(0,+val('u_ok'))),oranYonlendirme:Math.min(100,Math.max(0,+val('u_oy'))),telGor:chk('u_telgor'),sms:chk('u_sms')};
     if(d.id){const u=U(d.id);Object.assign(u,x);subeIds.forEach(s=>u.musait[s]=u.musait[s]||{})}
