@@ -1261,10 +1261,10 @@ function seansDuz(id){const s=SE(id),d=D(s.danisanId),o=s.odeme;A._sid=id;
   sheet('Seansı düzenle',`<div class="secili"><div class="grow"><b>${esc(d.ad)}</b><span class="small muted">${fmtD(s.tarih)} ${s.saat} · ${esc(O(s.odaId).ad)}</span></div>${badge(s.durum)}</div>
   <div class="row2">${fld('Uzman',`<select id="sd_uz" data-chg="sdCalc">${uz.map(u=>`<option value="${u.id}" ${u.id===s.uzmanId?'selected':''}>${esc(u.ad)}${u.aktif?'':' (pasif)'}</option>`).join('')}</select>`)}
   ${fld('Seans türü',`<select id="sd_tur">${TURLER.map(t=>`<option ${t===s.tur?'selected':''}>${t}</option>`).join('')}</select>`)}</div>
-  <div class="row2">${fld('Kaynak',`<select id="sd_kaynak" data-chg="sdKaynak">${Object.entries(KAYNAK).map(([k,l])=>`<option value="${k}" ${s.kaynak===k?'selected':''}>${l}</option>`).join('')}</select>`)}
-  ${fld(o?'Brüt ücret (₺)':'Ücret (₺)',`<input id="sd_ucret" type="number" inputmode="decimal" min="0" value="${s.ucret}" data-in="sdCalc" ${s.kaynak==='firma'||o?'disabled':''}>`)}</div>
-  ${o&&s.kaynak!=='firma'?'<span class="small muted" style="margin-top:-8px">Ödenmiş seansta tutar aşağıdaki tahsilat bilgilerinden değiştirilir.</span>':''}
+  ${fld('Kaynak',`<select id="sd_kaynak" data-chg="sdKaynak">${Object.entries(KAYNAK).map(([k,l])=>`<option value="${k}" ${s.kaynak===k?'selected':''}>${l}</option>`).join('')}</select>`)}
   <div id="sd_firmaBox" class="sub-box" ${s.kaynak==='firma'?'':'hidden'}>${fld('Firma',`<select id="sd_firma" data-chg="sdCalc"><option value="">Firma seçin</option>${S.firmalar.filter(f=>f.subeIds.includes(s.subeId)||f.id===s.firmaId).map(f=>`<option value="${f.id}" ${f.id===(s.firmaId||d.firmaId)?'selected':''}>${esc(f.ad)}</option>`).join('')}</select>`)}<span class="small muted">Firma danışanından ücret alınmaz. Danışanın kartındaki firma da bu seçime göre güncellenir.</span></div>
+  ${fld(o?'Brüt ücret (₺)':'Ücret (₺)',`<input id="sd_ucret" type="number" inputmode="decimal" min="0" value="${s.ucret}" data-in="sdCalc" ${s.kaynak==='firma'||o?'disabled':''}>`)}
+  ${o&&s.kaynak!=='firma'?'<span class="small muted" style="margin-top:-8px">Ödenmiş seansta tutar aşağıdaki tahsilat bilgilerinden değiştirilir.</span>':''}
   ${s.tur==='Çocuk'||s.tur==='Ergen'?`<label class="chk"><input type="checkbox" id="sd_eb" ${s.sadeceEbeveyn?'checked':''}> Sadece ebeveyn görüşmesi</label>`:''}
   ${fld('Not',`<textarea id="sd_not">${esc(s.not||'')}</textarea>`)}
   ${o?`<div class="sub-box"><span class="lbl">Tahsilat bilgileri</span>
