@@ -1502,7 +1502,7 @@ const A={
     if(y.length<6){toast('Yeni şifre en az 6 karakter olmalı.',1);return}if(y!==val('sd_t')){toast('Yeni şifreler birbiriyle aynı değil.',1);return}
     h.obj.sifre=y;kapat();commit();toast('Şifreniz güncellendi.')},
   sifreGoster(d,el){const i=$('#g_s');const g=i.type==='password';i.type=g?'text':'password';el.setAttribute('aria-label',g?'Şifreyi gizle':'Şifreyi göster');el.style.color=g?'var(--accent)':''},
-  sifreUnut(){const e=$('#g_hata');e.hidden=false;e.className='cmsg';e.style.background='var(--surface-2)';e.style.color='var(--ink)';e.innerHTML='<span>Şifrenizi merkez yöneticiniz sıfırlayabilir. Asistan şifreleri Şubeler sayfasından, psikolog şifreleri Uzmanlar sayfasından değiştirilir.</span>'},
+  sifreUnut(){const e=$('#g_hata');e.hidden=false;e.className='cmsg';e.style.background='var(--surface-2)';e.style.color='var(--ink)';e.innerHTML='<span>Şifrenizi sıfırlamak için yöneticinizle iletişime geçin.</span>'},
   girisRol(d,el){UI.girisRol=el.value;$('#g_hata').hidden=true;$('#g_k').focus()},
   demoDoldur(d){const r=document.querySelector(`input[name="g_rol"][value="${d.r}"]`);if(r){r.checked=true;UI.girisRol=d.r}$('#g_k').value=d.k;$('#g_s').value='demo1234';$('#g_hata').hidden=true;$('#g_btn').focus()},
   girisYap(){const e=$('#g_hata');const goster=m=>{e.hidden=false;e.className='cmsg err';e.removeAttribute('style');e.innerHTML=`<span>${m}</span>`};
