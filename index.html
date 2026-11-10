@@ -1261,9 +1261,10 @@ function seansDuz(id){const s=SE(id),d=D(s.danisanId),o=s.odeme;A._sid=id;
   sheet('Seansı düzenle',`<div class="secili"><div class="grow"><b>${esc(d.ad)}</b><span class="small muted">${fmtD(s.tarih)} ${s.saat} · ${esc(O(s.odaId).ad)}</span></div>${badge(s.durum)}</div>
   <div class="row2">${fld('Uzman',`<select id="sd_uz" data-chg="sdCalc">${uz.map(u=>`<option value="${u.id}" ${u.id===s.uzmanId?'selected':''}>${esc(u.ad)}${u.aktif?'':' (pasif)'}</option>`).join('')}</select>`)}
   ${fld('Seans türü',`<select id="sd_tur">${TURLER.map(t=>`<option ${t===s.tur?'selected':''}>${t}</option>`).join('')}</select>`)}</div>
-  <div class="row2">${fld('Kaynak',`<select id="sd_kaynak" data-chg="sdKaynak">${Object.entries(KAYNAK).map(([k,l])=>`<option value="${k}" ${s.kaynak===k?'selected':''} ${k==='firma'&&!d.firmaId?'disabled':''}>${l}${k==='firma'&&d.firmaId&&F(d.firmaId)?' · '+esc(F(d.firmaId).ad):''}</option>`).join('')}</select>`)}
+  <div class="row2">${fld('Kaynak',`<select id="sd_kaynak" data-chg="sdKaynak">${Object.entries(KAYNAK).map(([k,l])=>`<option value="${k}" ${s.kaynak===k?'selected':''}>${l}</option>`).join('')}</select>`)}
   ${fld(o?'Brüt ücret (₺)':'Ücret (₺)',`<input id="sd_ucret" type="number" inputmode="decimal" min="0" value="${s.ucret}" data-in="sdCalc" ${s.kaynak==='firma'||o?'disabled':''}>`)}</div>
   ${o&&s.kaynak!=='firma'?'<span class="small muted" style="margin-top:-8px">Ödenmiş seansta tutar aşağıdaki tahsilat bilgilerinden değiştirilir.</span>':''}
+  <div id="sd_firmaBox" class="sub-box" ${s.kaynak==='firma'?'':'hidden'}>${fld('Firma',`<select id="sd_firma" data-chg="sdCalc"><option value="">Firma seçin</option>${S.firmalar.filter(f=>f.subeIds.includes(s.subeId)||f.id===s.firmaId).map(f=>`<option value="${f.id}" ${f.id===(s.firmaId||d.firmaId)?'selected':''}>${esc(f.ad)}</option>`).join('')}</select>`)}<span class="small muted">Firma danışanından ücret alınmaz. Danışanın kartındaki firma da bu seçime göre güncellenir.</span></div>
   ${s.tur==='Çocuk'||s.tur==='Ergen'?`<label class="chk"><input type="checkbox" id="sd_eb" ${s.sadeceEbeveyn?'checked':''}> Sadece ebeveyn görüşmesi</label>`:''}
   ${fld('Not',`<textarea id="sd_not">${esc(s.not||'')}</textarea>`)}
   ${o?`<div class="sub-box"><span class="lbl">Tahsilat bilgileri</span>
@@ -1325,7 +1326,7 @@ const A={
   
   firmaTamamla(d){const s=SE(d.id);s.durum='odendi';s.odeme=SIFIR(TODAY);iz(s,'Firma seansı tamamlandı');kapat();commit();
     toast('Firma seansı tamamlandı.')},
-  sdKaynak(){const s=SE(A._sid);const k=val('sd_kaynak');const uc=$('#sd_ucret');
+  sdKaynak(){const s=SE(A._sid);const k=val('sd_kaynak');const uc=$('#sd_ucret');$('#sd_firmaBox').hidden=k!=='firma';
     if(k==='firma'){uc.value=0;uc.disabled=true}
     else{uc.disabled=false;if(+uc.value===0)uc.value=S.fiyat[val('sd_tur')]}
     A.sdCalc()},
@@ -1382,10 +1383,12 @@ const A={
   seansKaydet(){const s=SE(A._sid);if(!$('#sd_msg').hidden){toast('Uzman çakışması var.',1);return}
     const uc=val('sd_kaynak')==='firma'?0:+(s.odeme&&$('#sd2_brut')?val('sd2_brut'):val('sd_ucret'));
     const yk=val('sd_kaynak');const dd=D(s.danisanId);
+    if(yk==='firma'){const fid=val('sd_firma');if(!fid){toast('Firma seçin.',1);$('#sd_firma').focus();return}const f=F(fid);
+      if(f.uzmanKisit!=='tum'&&!f.uzmanIds.includes(val('sd_uz'))){toast(`${U(val('sd_uz')).ad}, ${f.ad} anlaşmasında yetkili uzmanlar arasında değil.`,1);return}}
     if(yk!=='firma'&&!(+(s.odeme&&$('#sd2_brut')?val('sd2_brut'):val('sd_ucret'))>0)){toast('Ücretli seans için ücret girin.',1);return}
     if(s.odeme&&$('#sd2_oran')&&!(+val('sd2_oran')>=0&&+val('sd2_oran')<=100)){toast('Ofis payı 0 ile 100 arasında olmalı.',1);return}
-    const deg=[];const eski={uz:s.uzmanId,uc:s.ucret,k:s.kaynak,t:s.tur,o:s.odeme&&{...s.odeme}};
-    s.uzmanId=val('sd_uz');s.tur=val('sd_tur');s.kaynak=val('sd_kaynak');s.firmaId=s.kaynak==='firma'?dd.firmaId:null;s.ucret=uc;s.not=val('sd_not');if($('#sd_eb'))s.sadeceEbeveyn=chk('sd_eb');
+    const deg=[];const eski={uz:s.uzmanId,uc:s.ucret,k:s.kaynak,t:s.tur,f:s.firmaId,o:s.odeme&&{...s.odeme}};
+    s.uzmanId=val('sd_uz');s.tur=val('sd_tur');s.kaynak=val('sd_kaynak');s.firmaId=s.kaynak==='firma'?val('sd_firma'):null;if(s.firmaId)dd.firmaId=s.firmaId;if((eski.f||'')!==(s.firmaId||'')&&s.firmaId&&eski.k==='firma')deg.push(`firma ${(F(eski.f)||{}).ad||'-'} → ${F(s.firmaId).ad}`);s.ucret=uc;s.not=val('sd_not');if($('#sd_eb'))s.sadeceEbeveyn=chk('sd_eb');
     if(eski.uz!==s.uzmanId)deg.push(`uzman ${U(eski.uz).ad} → ${U(s.uzmanId).ad}`);if(eski.k!==s.kaynak)deg.push(`kaynak ${KAYNAK[eski.k]} → ${KAYNAK[s.kaynak]}`);if(eski.t!==s.tur)deg.push(`tür ${eski.t} → ${s.tur}`);
     if(s.odeme&&s.kaynak==='firma'){s.odeme=SIFIR(val('sd_ot')||s.odeme.tarih)}
     else if(s.odeme){const c=sdHes();const kanal=document.querySelector('input[name="sd2_kanal"]:checked').value;
