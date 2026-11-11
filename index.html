@@ -294,7 +294,11 @@ input[type="date"]::-webkit-date-and-time-value{text-align:center;margin:0 auto;
 .ucard .grow small{color:var(--muted);font-size:.75rem}
 .ucard .tags{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:48%}
 @media (hover:hover){.ucard:not(.off):hover{border-color:var(--accent)}}
-.ucard.on{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 8%,var(--surface));box-shadow:0 0 0 1px var(--ok)}
+.ucard.on{border-color:var(--ok);background:var(--ok);color:#fff;box-shadow:0 0 0 1px var(--ok)}
+.ucard.on .grow small{color:rgba(255,255,255,.85)}
+.ucard.on .av{background:rgba(255,255,255,.22);color:#fff}
+.ucard.on .badge{background:rgba(255,255,255,.2);color:#fff;border-color:transparent}
+.ucard.on .badge::before{background:#fff}
 .ucard.off{opacity:.55;cursor:not-allowed}
 .telmsg{font-size:.76rem;font-weight:600;min-height:0}
 .telmsg.ok{color:var(--ok)}
