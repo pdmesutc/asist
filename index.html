@@ -1066,7 +1066,7 @@ function seansDetay(id){const s=SE(id),d=D(s.danisanId),u=U(s.uzmanId),o=O(s.oda
 const RS={mode:'asistan'};
 function vRandevu(mode){mode=mode||'asistan';RS.mode=mode;RS.oneri=null;const self=U(UI.uzmanId);
   const subeSel=mode==='psikolog'?fld('Şube',`<select id="r_sube" data-chg="formYenile">${self.subeIds.map(id=>`<option value="${id}">${esc(B(id).ad)}</option>`).join('')}</select>`):`<input type="hidden" id="r_sube" value="${UI.subeId}">`;
-  return`<div class="page-head"><div><h1>Yeni randevu</h1><p>${mode==='psikolog'?`Kendi portföyünüzden gelen danışanlar ofis payı %${self.oranKendi} üzerinden hesaplanır.`:`${esc(B(UI.subeId).ad)} şubesi · çakışma kontrolü otomatik yapılır`}</p></div></div>
+  return`<div class="page-head"><div><h1>Yeni randevu</h1><p>${mode==='psikolog'?'Görüştüğünüz bir danışanı arayın ya da yeni danışan ekleyin.':`${esc(B(UI.subeId).ad)} şubesi · çakışma kontrolü otomatik yapılır`}</p></div></div>
   <form id="rf" class="form-grid" data-submit="randevuKaydet" autocomplete="off">
    <section class="card"><h2>Danışan</h2>
     <div class="ac" id="acWrap"><label class="field"><span>Kayıtlı danışan ara</span><div class="search">${ic('search')}<input id="r_ara" placeholder="Ad veya telefon yazın" data-in="acAra" aria-autocomplete="list" aria-controls="acList"></div></label><div id="acList" class="ac-list" hidden></div></div>
@@ -1437,8 +1437,11 @@ function benimDanisanlar(){const ids=new Set(S.seanslar.filter(s=>s.uzmanId===UI
 function vDanisanlarim(){const all=benimDanisanlar();
   return`<div class="page-head"><div><h1>Danışanlar</h1><p>Yalnızca sizinle görüşmesi olan ${all.length} danışan görüntülenir.</p></div></div>
   <div class="search">${ic('search')}<input id="pq" placeholder="Danışan ara" value="${esc(UI.pq||'')}" data-in="pAra" aria-label="Danışan ara"></div><div id="pList">${pListHTML()}</div>`}
-function pListHTML(){const q=UI.pq||'';const u=U(UI.uzmanId);const list=dFiltre(benimDanisanlar(),q).slice(0,100);
-  return list.length?`<div class="dl">${dRows(list,q,'pDanisan',u.telGor?null:u)}</div>`:'<div class="empty"><b>Danışan bulunamadı</b></div>'}
+function pListHTML(){const q=UI.pq||'';const u=U(UI.uzmanId);const list=dFiltre(benimDanisanlar(),q);const per=50,pages=Math.max(1,Math.ceil(list.length/per));
+  UI.pp=Math.min(Math.max(0,UI.pp||0),pages-1);const st=UI.pp*per;
+  if(!list.length)return'<div class="empty"><b>Danışan bulunamadı</b></div>';
+  return`<div class="dl">${dRows(list.slice(st,st+per),q,'pDanisan',u.telGor?null:u)}</div>
+  ${pages>1?`<div class="pager"><span class="num kayit">${(st+1).toLocaleString('tr-TR')}–${Math.min(st+per,list.length).toLocaleString('tr-TR')} / ${list.length.toLocaleString('tr-TR')} kayıt</span><span class="psayfa"><button class="btn sm" data-act="pSayfa" data-v="-1" ${UI.pp===0?'disabled':''}>${ic('l')}Önceki</button><span class="num">Sayfa ${UI.pp+1} / ${pages}</span><button class="btn sm" data-act="pSayfa" data-v="1" ${UI.pp>=pages-1?'disabled':''}>Sonraki${ic('r')}</button></span></div>`:''}`}
 function vHakedis(){const u=U(UI.uzmanId);if(!UI._hkSet){UI.per={tip:'ay',ref:TODAY};UI._hkSet=1}const[b,e]=perRange();
   const k=kasa(null,b,e,u.id);
   const odendiMi=s=>S.uzmanOdemeleri.some(o=>o.uzmanId===u.id&&o.subeId===s.subeId&&o.ay===s.tarih.slice(0,7));
@@ -1800,7 +1803,7 @@ const A={
   tkShift(d){UI.tk=addDays(UI.tk||TODAY,+d.v);render()},tkToday(){UI.tk=TODAY;render()},tkTarih(d,el){if(el.value){UI.tk=el.value;render()}},
   acAra(d,el){const q=el.value.trim();const box=$('#acList');if(q.length<2){box.hidden=true;return}
     let pool=RS.mode==='psikolog'?benimDanisanlar():sorted();const res=dFiltre(pool,q).slice(0,8);
-    box.innerHTML=res.map(x=>`<button type="button" data-act="acSec" data-id="${x.id}"><span><b>${hl(x.ad,q)}</b><span class="small muted" style="display:block">${esc(x.tel)} · ${x.tur?x.tur+' · ':''}${esc(B(x.subeId).ad)}</span></span><span class="small muted num">${toplamSeans(x)} seans</span></button>`).join('')+`<button type="button" class="new" data-act="acYeni">+ “${esc(q)}” adıyla yeni danışan</button>`;box.hidden=false},
+    box.innerHTML=res.map(x=>`<button type="button" data-act="acSec" data-id="${x.id}"><span><b>${hl(x.ad,q)}</b><span class="small muted" style="display:block">${x.tel?esc(x.tel)+' · ':''}${x.tur?x.tur+' · ':''}${esc(B(x.subeId).ad)}</span></span><span class="small muted num">${toplamSeans(x)} seans</span></button>`).join('')+`<button type="button" class="new" data-act="acYeni">+ “${esc(q)}” adıyla yeni danışan</button>`;box.hidden=false},
   acSec(d){const l=$('#acList');if(l)l.hidden=true;const t=$('#r_telInfo');if(t)t.hidden=true;acSecId(d.id)},
   acYeni(){const q=val('r_ara');$('#acList').hidden=true;if(/\d{4,}/.test(q)){$('#r_tel').value=normTel(q);telDurum($('#r_tel'))}else $('#r_ad').value=q;$('#r_ad').focus()},
   acTemizle(){$('#r_did').value='';$('#r_secili').hidden=true;$('#acWrap').hidden=false;RS.oneri=null;$('#r_oneri').innerHTML='';['r_ad','r_tel','r_es_ad','r_es_tel','r_anne_ad','r_anne_tel','r_baba_ad','r_baba_tel','r_ara'].forEach(i=>$('#'+i).value='');$('#r_ara').focus()},
@@ -1845,7 +1848,7 @@ const A={
     if(fid)d.firmaId=fid;
     const s={id:uid('s'),danisanId:d.id,uzmanId:uz,subeId:sub,odaId:oda,tarih,saat,tur,kaynak,firmaId:fid,ucret:fid?0:(+val('r_ucret')||S.fiyat[tur]),durum:'bekliyor',odeme:null,sadeceEbeveyn:cocuk&&chk('r_ebeveyn'),not:val('r_not')};
     S.seanslar.push(s);M.d.set(d.id,d);M.s.set(s.id,s);
-    const n=smsDanisanVeUzman('yeni',s,true);
+    const n=smsDanisanVeUzman('yeni',s,UI.rol!=='psikolog'); // randevuyu psikolog kendisi açtıysa kendisine SMS gitmez
     if(RS.mode==='psikolog'){UI.view='ajanda';UI.aj='gun';UI.ajT=tarih}else{UI.view='gorusmeler';UI.per={tip:'gun',ref:tarih};UI.gf={durum:'all',uzman:'all'}}
     commit();scrollTo(0,0);toast(`Randevu oluşturuldu · ${fmtD(tarih)} ${saat}${n?` · ${n} SMS ${S.netgsm.kod?'gönderildi':'(simülasyon)'}`:''}`)},
   dAra(d,el){UI.dq=el.value;UI.dp=0;$('#dList').innerHTML=dListHTML()},
@@ -1853,7 +1856,8 @@ const A={
   dSayfa(d){UI.dp=(UI.dp||0)+(+d.v);$('#dList').innerHTML=dListHTML();$('#dq').scrollIntoView({block:'start',behavior:'smooth'})},
   danisanDetay(d){danisanDetay(d.id,aktifRol()==='psikolog')},
   pDanisan(d){danisanDetay(d.id,true)},
-  pAra(d,el){UI.pq=el.value;$('#pList').innerHTML=pListHTML()},
+  pAra(d,el){UI.pq=el.value;UI.pp=0;$('#pList').innerHTML=pListHTML()},
+  pSayfa(d){UI.pp=(UI.pp||0)+(+d.v);$('#pList').innerHTML=pListHTML();$('#pq').scrollIntoView({block:'start',behavior:'smooth'})},
   danisanRandevu(d){UI.prefill={did:d.id};UI.view=aktifRol()==='psikolog'?'kendi':'randevu';kapat();render();scrollTo(0,0)},
   uzOde(d){S.uzmanOdemeleri.push({id:uid('o'),uzmanId:d.uz,subeId:UI.subeId,ay:d.ay,tutar:+d.t,tarih:TODAY});commit();toast(`${U(d.uz).ad} hak edişi ödendi olarak işaretlendi.`)},
   gEkle(){const t=+val('g_tutar');if(!(t>0)){toast('Tutar girin.',1);return}S.masraflar.push({id:uid('g'),subeId:UI.subeId,tarih:val('g_tarih')||TODAY,kategori:val('g_kat'),aciklama:val('g_ac')||val('g_kat'),tutar:t});commit();toast(`Gider eklendi · ${TL(t)}`)},
