@@ -889,16 +889,20 @@ function alicilar(d){const a=[];if(!d)return a;
 const SMSQ={k:[],t:null,ekle(x){SMSQ.k.push(x);if(!SMSQ.t)SMSQ.t=setTimeout(SMSQ.gonder,60)},
   async gonder(){SMSQ.t=null;const l=SMSQ.k.splice(0);if(!l.length)return;const gecerli=l.filter(x=>/^5\d{9}$/.test(normTel(x.tel)));const sonuc=new Map();let hata='';
     for(let i=0;i<gecerli.length;i+=300){const p=gecerli.slice(i,i+300);
-      try{const o=await API.cagir('sms',{mesajlar:p.map(x=>({tel:normTel(x.tel),metin:x.metin}))});const atl=new Set(o.atlanan||[]);p.forEach(x=>sonuc.set(x.id,o.simulasyon?'Simülasyon':atl.has(normTel(x.tel))?'Test modu · gönderilmedi':'Gönderildi'))}
+      try{const o=await API.cagir('sms',{mesajlar:p.map(x=>({tel:normTel(x.tel),metin:x.metin,seansId:x.seansId}))});const atl=new Set(o.atlanan||[]);p.forEach(x=>sonuc.set(x.id,o.simulasyon?'Simülasyon':atl.has(normTel(x.tel))?'Test modu · gönderilmedi':'Gönderildi'))}
       catch(e){hata=e.message;p.forEach(x=>sonuc.set(x.id,'Gönderilemedi'))}}
     l.forEach(x=>{const r=S.smsLog.find(y=>y.id===x.id);if(r)r.durum=sonuc.get(x.id)||'Geçersiz numara'});
     if(hata)toast('SMS gönderilemedi: '+hata,1);commit()}};
-function smsAt(tip,s,list){const sab=sablonAl(s.subeId,tip);if(!list.length)return 0;
+function smsAt(tip,s,list){const sab=sablonAl(s.subeId,tip);if(!list.length||!smsAcik(s))return 0;
   if(sab.includes('[ONLINE_LINK]')&&!onlineLink(s)){toast(`SMS gönderilmedi: ${(U(s.uzmanId)||{}).ad||'Uzman'} için online görüşme linki tanımlı değil (Uzmanlar sayfası).`,1);return 0}
   const metin=doldur(sab,s);const zaman=new Date().toISOString();
-  list.forEach(a=>{const id=uid('m');S.smsLog.unshift({id,zaman,tip,alici:a.ad,tel:a.tel,metin,durum:SUNUCU?'Gönderiliyor':S.netgsm.kod?'NetGSM kuyruğu':'Simülasyon',subeId:s.subeId});if(SUNUCU)SMSQ.ekle({id,tel:a.tel,metin})});
+  list.forEach(a=>{const id=uid('m');S.smsLog.unshift({id,zaman,tip,alici:a.ad,tel:a.tel,metin,durum:SUNUCU?'Gönderiliyor':S.netgsm.kod?'NetGSM kuyruğu':'Simülasyon',subeId:s.subeId});if(SUNUCU)SMSQ.ekle({id,tel:a.tel,metin,seansId:s.id})});
   S.smsLog=S.smsLog.slice(0,400);return list.length}
-function smsDanisanVeUzman(tip,s,uzmanaDa){const t=tip==='yeni'&&onlineMi(s)?'online':tip;let n=smsAt('d_'+t,s,alicilar(D(s.danisanId)));const u=U(s.uzmanId);if(uzmanaDa&&u&&u.sms&&u.tel)n+=smsAt('p_'+t,s,[{ad:u.ad,tel:u.tel}]);return n}
+/* SMS hizmeti uzman bazında yöneticinin kararıdır: kapalıysa ne danışana ne uzmana mesaj gider.
+   Psikolog işlemi kendisi yaptıysa kendisine bilgilendirme gitmez. */
+const smsAcik=s=>!!(U(s.uzmanId)||{}).sms;
+function smsDanisanVeUzman(tip,s,uzmanaDa){if(!smsAcik(s))return 0;const t=tip==='yeni'&&onlineMi(s)?'online':tip;let n=smsAt('d_'+t,s,alicilar(D(s.danisanId)));const u=U(s.uzmanId);if(uzmanaDa&&UI.rol!=='psikolog'&&u.tel)n+=smsAt('p_'+t,s,[{ad:u.ad,tel:u.tel}]);return n}
+const smsNot=(s,n)=>smsAcik(s)?(n?` · ${n} SMS ${S.netgsm.kod||S.netgsm.bagli?'gönderildi':'(simülasyon)'}`:''):' · SMS gönderilmedi (uzman için SMS hizmeti kapalı)'
 
 /* ============ UI çekirdeği ============ */
 function toast(m,err){const r=$('#toast-root');r.innerHTML=`<div class="toast ${err?'err':''}" role="status">${esc(m)}</div>`;clearTimeout(toast.t);toast.t=setTimeout(()=>r.innerHTML='',3200)}
@@ -1191,7 +1195,7 @@ function formKontrol(){
   const e=cakisma(p);box.hidden=false;
   if(p.tarih<TODAY)e.push('Geçmiş bir tarih seçtiniz.');
   box.className='cmsg '+(e.length?'err':'ok');
-  box.innerHTML=e.length?e.map(x=>`<span>• ${esc(x)}</span>`).join(''):`<span>✓ Uygun: ${esc(U(p.uzmanId).ad)} ve ${esc(O(p.odaId).ad)} ${p.saat} için boş.</span>`;
+  box.innerHTML=e.length?e.map(x=>`<span>• ${esc(x)}</span>`).join(''):`<span>✓ Uygun: ${esc(U(p.uzmanId).ad)} ve ${esc(O(p.odaId).ad)} ${p.saat} için boş.</span>${U(p.uzmanId).sms?'':'<span class="small">Bu uzman için SMS hizmeti kapalı; danışana ve uzmana SMS gönderilmeyecek.</span>'}`;
   $$('#r_slots .slot').forEach(b=>b.classList.toggle('on',b.dataset.h===p.saat));
 }
 function acSecId(id){const d=D(id);if(!d)return;
@@ -1295,13 +1299,13 @@ function vGiderler(){const[b,e]=perRange();const list=S.masraflar.filter(m=>m.su
 function vSms(){const t=UI.smsT||addDays(TODAY,1);
   const list=S.seanslar.filter(s=>s.subeId===UI.subeId&&s.tarih===t&&s.durum==='bekliyor').sort((a,b)=>a.saat.localeCompare(b.saat));
   UI.smsSel=UI.smsSel&&UI.smsSel.t===t?UI.smsSel:{t,ids:new Set(list.map(s=>s.id))};
-  const sel=list.filter(s=>UI.smsSel.ids.has(s.id));const nAl=sel.reduce((a,s)=>a+alicilar(D(s.danisanId)).length,0);
+  const sel=list.filter(s=>UI.smsSel.ids.has(s.id));const nAl=sel.reduce((a,s)=>a+(smsAcik(s)?alicilar(D(s.danisanId)).length:0),0);
   const log=S.smsLog.filter(l=>l.subeId===UI.subeId).slice(0,12);
   return`<div class="page-head"><div><h1>Toplu SMS</h1><p>${S.netgsm.kod?`NetGSM bağlı · başlık ${esc(S.netgsm.baslik)}`:'NetGSM hesabı tanımlı değil · gönderimler simülasyon olarak kaydedilir'}</p></div></div>
   <div class="form-grid">
   <div class="card"><div class="card-h"><h2>Seanslar</h2><input type="date" class="inp" style="width:auto;min-height:40px" value="${t}" data-chg="smsTarih" aria-label="Tarih"></div>
    ${list.length?`<label class="chk"><input type="checkbox" id="smsAll" data-chg="smsTum" ${sel.length===list.length?'checked':''}> <b>Tümünü seç</b> <span class="muted small">(${list.length} seans)</span></label>
-   <div class="dl">${list.map(s=>{const d=D(s.danisanId);const a=alicilar(d);return`<label class="row" style="display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--accent)" data-chg="smsSec" data-id="${s.id}" ${UI.smsSel.ids.has(s.id)?'checked':''}><span style="min-width:0"><b>${s.saat} · ${esc(d.ad)}</b><span class="mt" style="display:block;font-size:.8rem;color:var(--muted)">${esc(U(s.uzmanId).ad)} · ${a.length?a.map(x=>esc(x.ad.split(' ')[0])).join(', '):'SMS izni yok'}</span></span><span class="small muted">${a.length} alıcı</span></label>`}).join('')}</div>`:`<div class="empty"><b>${fmtD(t,{day:'numeric',month:'long'})} için bekleyen seans yok</b>Başka bir tarih seçin.</div>`}
+   <div class="dl">${list.map(s=>{const d=D(s.danisanId);const a=alicilar(d);return`<label class="row" style="display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--accent)" data-chg="smsSec" data-id="${s.id}" ${UI.smsSel.ids.has(s.id)?'checked':''}><span style="min-width:0"><b>${s.saat} · ${esc(d.ad)}</b><span class="mt" style="display:block;font-size:.8rem;color:var(--muted)">${esc(U(s.uzmanId).ad)} · ${!smsAcik(s)?'Uzman için SMS kapalı':a.length?a.map(x=>esc(x.ad.split(' ')[0])).join(', '):'SMS izni yok'}</span></span><span class="small muted">${smsAcik(s)?a.length:0} alıcı</span></label>`}).join('')}</div>`:`<div class="empty"><b>${fmtD(t,{day:'numeric',month:'long'})} için bekleyen seans yok</b>Başka bir tarih seçin.</div>`}
   </div>
   <div class="card"><h2>Mesaj</h2>
    <div class="smsprev">${sel.length?esc(doldur(sablonAl(sel[0].subeId,'d_hatirlatma'),sel[0])):'<span class="muted">Önizleme için seans seçin.</span>'}</div>
@@ -1366,7 +1370,7 @@ function uzListHTML(){const q=(UI.uzq||'').trim();const ql=low(q),qd=digits(q);
   return`<div class="grid2">${list.map(u=>`<button class="lc" data-act="uzDuz" data-id="${u.id}"><div class="lc-h"><div><b>${hl(u.ad,q)}</b><div class="small muted">${esc(u.email)} · ${esc(u.tel)}</div></div>${u.aktif?'':'<span class="badge b-pasif">Pasif</span>'}</div>
    <div class="chips">${u.alanlar.map(tchip).join('')}</div>
    <div class="meta"><span>Şube <strong>${u.subeIds.map(id=>esc(B(id)?B(id).ad:'')).join(', ')}</strong></span><span>Kendi danışanı ofis payı <strong class="num">%${u.oranKendi}</strong></span><span>Ofis danışanı ofis payı <strong class="num">%${u.oranYonlendirme}</strong></span><span>Telefon görür <strong>${u.telGor?'Evet':'Hayır'}</strong></span><span>SMS <strong>${u.sms?'Açık':'Kapalı'}</strong></span></div></button>`).join('')}</div>`}
-function uzDuz(id){const u=id?U(id):{ad:'',tel:'',email:'',sifre:'',alanlar:['Yetişkin'],subeIds:[UI.subeId||S.subeler[0].id],oranKendi:30,oranYonlendirme:50,telGor:true,sms:true,aktif:true};
+function uzDuz(id){const u=id?U(id):{ad:'',tel:'',email:'',sifre:'',alanlar:['Yetişkin'],subeIds:[UI.subeId||S.subeler[0].id],oranKendi:30,oranYonlendirme:50,telGor:true,sms:false,aktif:true};
   sheet(id?'Uzmanı düzenle':'Yeni uzman',`${fld('Ad soyad / unvan',`<input id="u_ad" value="${esc(u.ad)}" placeholder="Uzm. Psk. Ad Soyad">`)}
   <div class="row2">${fld('Telefon',`<input id="u_tel" type="tel" data-tel inputmode="numeric" placeholder="5XXXXXXXXX" autocomplete="off" value="${esc(u.tel)}">`)}${fld('E-posta (giriş)',`<input id="u_email" type="email" value="${esc(u.email)}">`)}</div>
   ${fld('Giriş şifresi',`<input id="u_sifre" type="text" autocomplete="off" value="${SUNUCU?'':esc(u.sifre)}" placeholder="${SUNUCU?(id?'Değiştirmek için yeni şifre':'En az 10 karakter'):''}">`)}
@@ -1376,7 +1380,7 @@ function uzDuz(id){const u=id?U(id):{ad:'',tel:'',email:'',sifre:'',alanlar:['Ye
   <div class="small muted">Örnek: 2.000 ₺ yönlendirme seansında KDV sonrası matrahın %${u.oranYonlendirme}’i ofise, kalanı uzmana yazılır.</div>
   ${fld('Online görüşme linki',`<input id="u_link" type="url" inputmode="url" autocapitalize="none" spellcheck="false" placeholder="https://meet.google.com/... veya Zoom linki" value="${esc(u.onlineLink||'')}">`)}
   <label class="sw"><span>Danışan telefonlarını görebilir</span><input type="checkbox" id="u_telgor" ${u.telGor?'checked':''}><i></i></label>
-  <label class="sw"><span>Seans bilgilendirme SMS’i alsın</span><input type="checkbox" id="u_sms" ${u.sms?'checked':''}><i></i></label>
+  <label class="sw"><span>SMS hizmeti<small style="display:block;font-weight:400;color:var(--muted)">Açıksa bu uzmanın seanslarında danışana ve uzmana randevu SMS'leri gider; kapalıysa hiçbirine gitmez.</small></span><input type="checkbox" id="u_sms" ${u.sms?'checked':''}><i></i></label>
   ${id&&u.aktif?(()=>{const n=S.seanslar.filter(s=>s.uzmanId===id&&s.durum==='bekliyor'&&!gecti(s)).length;return n?`<div class="small muted">${n} aktif seansı olduğu için şu an pasife alınamaz.</div>`:''})():''}`,
   `${id?`<button class="btn ${u.aktif?'danger':''}" data-act="uzPasif" data-id="${id}">${u.aktif?'Pasife al':'Yeniden aktifleştir'}</button>`:''}<button class="btn" data-act="kapat">Vazgeç</button><button class="btn primary" data-act="uzKaydet" data-id="${id||''}">Kaydet</button>`)}
 
@@ -1793,7 +1797,7 @@ const A={
     if(e.some(x=>x.includes('dolu'))){const alt=bosOda(s.subeId,val('e_t'),val('e_h'),s.tur,s.id);if(alt&&alt.id!==val('e_o')){$('#e_o').value=alt.id;return A.eKontrol()}}
     const b=$('#e_msg');b.className='cmsg '+(e.length?'err':'ok');b.innerHTML=e.length?e.map(x=>`<span>• ${esc(x)}</span>`).join(''):'<span>✓ Yeni zaman uygun.</span>';return e},
   erteleKaydet(){const e=A.eKontrol();if(e.length){toast('Çakışma var, başka bir zaman seçin.',1);return}const s=SE(A._eid);iz(s,`Ertelendi: ${s.tarih} ${s.saat} → ${val('e_t')} ${val('e_h')}`);s.tarih=val('e_t');s.saat=val('e_h');s.odaId=val('e_o');
-    let n=0;if(chk('e_sms'))n=smsDanisanVeUzman('degisiklik',s,true);kapat();commit();toast(`Seans ${fmtD(s.tarih)} ${s.saat} saatine taşındı${n?` · ${n} SMS`:''}.`)},
+    let n=0;if(chk('e_sms'))n=smsDanisanVeUzman('degisiklik',s,true);kapat();commit();toast(`Seans ${fmtD(s.tarih)} ${s.saat} saatine taşındı${chk('e_sms')?smsNot(s,n):''}.`)},
   iptalSor(d){const s=SE(d.id);sheet('Seansı iptal et',`<p style="margin:0">${esc(D(s.danisanId).ad)} · ${fmtD(s.tarih)} ${s.saat} seansı iptal edilecek. İptaller seans sayacına ve kasaya dahil edilmez.</p><label class="chk"><input type="checkbox" id="i_sms" checked> Danışana iptal SMS’i gönder</label>`,
     `<button class="btn" data-act="kapat">Vazgeç</button><button class="btn danger sure" data-act="iptalEt" data-id="${d.id}">İptal et</button>`)},
   iptalEt(d){const s=SE(d.id);iz(s,'İptal edildi'+(s.odeme?` (tahsilat ${TL(s.odeme.tahsilat)} silindi)`:''));s.durum='iptal';s.odeme=null;let n=0;if(chk('i_sms'))n=smsDanisanVeUzman('iptal',s,true);kapat();commit();toast(`Seans iptal edildi${n?` · ${n} SMS`:''}.`);pasifDon()},
@@ -1850,7 +1854,7 @@ const A={
     S.seanslar.push(s);M.d.set(d.id,d);M.s.set(s.id,s);
     const n=smsDanisanVeUzman('yeni',s,UI.rol!=='psikolog'); // randevuyu psikolog kendisi açtıysa kendisine SMS gitmez
     if(RS.mode==='psikolog'){UI.view='ajanda';UI.aj='gun';UI.ajT=tarih}else{UI.view='gorusmeler';UI.per={tip:'gun',ref:tarih};UI.gf={durum:'all',uzman:'all'}}
-    commit();scrollTo(0,0);toast(`Randevu oluşturuldu · ${fmtD(tarih)} ${saat}${n?` · ${n} SMS ${S.netgsm.kod?'gönderildi':'(simülasyon)'}`:''}`)},
+    commit();scrollTo(0,0);toast(`Randevu oluşturuldu · ${fmtD(tarih)} ${saat}${smsNot(s,n)}`)},
   dAra(d,el){UI.dq=el.value;UI.dp=0;$('#dList').innerHTML=dListHTML()},
   dKapsam(d){UI.dk=d.v;UI.dp=0;render()},
   dSayfa(d){UI.dp=(UI.dp||0)+(+d.v);$('#dList').innerHTML=dListHTML();$('#dq').scrollIntoView({block:'start',behavior:'smooth'})},
@@ -1867,7 +1871,7 @@ const A={
   smsTum(d,el){const t=UI.smsT||addDays(TODAY,1);const list=S.seanslar.filter(s=>s.subeId===UI.subeId&&s.tarih===t&&s.durum==='bekliyor');UI.smsSel.ids=new Set(el.checked?list.map(s=>s.id):[]);render()},
   smsSec(d,el){el.checked?UI.smsSel.ids.add(d.id):UI.smsSel.ids.delete(d.id);render()},
   smsGonder(){const t=UI.smsT||addDays(TODAY,1);const list=S.seanslar.filter(s=>UI.smsSel.ids.has(s.id)&&s.tarih===t);const uzDa=chk('smsUz');let n=0;
-    list.forEach(s=>{n+=smsAt('d_hatirlatma',s,alicilar(D(s.danisanId)));const u=U(s.uzmanId);if(uzDa&&u.sms&&u.tel)n+=smsAt('p_hatirlatma',s,[{ad:u.ad,tel:u.tel}])});commit();toast(`${n} SMS ${S.netgsm.kod?'NetGSM kuyruğuna alındı':'kaydedildi (simülasyon)'}.`)},
+    list.forEach(s=>{n+=smsAt('d_hatirlatma',s,alicilar(D(s.danisanId)));const u=U(s.uzmanId);if(uzDa&&u.sms&&u.tel)n+=smsAt('p_hatirlatma',s,[{ad:u.ad,tel:u.tel}])});const kapali=list.filter(s=>!smsAcik(s)).length;commit();toast(`${n} SMS ${S.netgsm.kod||S.netgsm.bagli?'gönderildi':'kaydedildi (simülasyon)'}${kapali?` · ${kapali} seans uzmanı için SMS kapalı olduğundan atlandı`:''}.`)},
   firmaSec(d,el){UI.fsec=el.value;render()},
   csv(){const blob=new Blob(['﻿'+csvMetni()],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${F(UI.fsec).ad.replace(/\W+/g,'_')}_${perRange()[0]}.csv`;document.body.appendChild(a);a.click();a.remove();toast('CSV hazırlandı. İndirme başlamazsa “Kopyala” ile Excel’e yapıştırın.')},
   csvKopya(){const t=csvMetni().replace(/;/g,'\t').replace(/"/g,'');navigator.clipboard.writeText(t).then(()=>toast('Tablo kopyalandı · Excel’e yapıştırabilirsiniz.'),()=>toast('Kopyalanamadı; tarayıcı izin vermedi.',1))},
