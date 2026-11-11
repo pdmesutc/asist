@@ -115,7 +115,7 @@ button{cursor:pointer}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
 .card-h{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:42px;padding:0 16px;border-radius:10px;border:1px solid var(--line);background:var(--surface);font-weight:600;font-size:.9rem;white-space:nowrap}
-.btn:hover{border-color:var(--muted)}
+@media (hover:hover){.btn:hover{border-color:var(--muted)}}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .btn.danger{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,var(--line))}
 .btn.danger.sure{background:var(--bad);color:#fff;border-color:var(--bad)}
@@ -237,13 +237,13 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.88rem}
 .tbl .r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .tbl tfoot td{font-weight:700;background:var(--surface-2)}
 .tbl tbody tr.click{cursor:pointer}
-.tbl tbody tr.click:hover{background:var(--surface-2)}
+@media (hover:hover){.tbl tbody tr.click:hover{background:var(--surface-2)}}
 
 /* Danışan list */
 .dl{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
 .dl button.row{display:grid;grid-template-columns:40px 1fr auto;gap:12px;align-items:center;text-align:left;border:0;border-bottom:1px solid var(--line);background:none;padding:10px 14px;width:100%}
 .dl button.row:last-child{border-bottom:0}
-.dl button.row:hover{background:var(--surface-2)}
+@media (hover:hover){.dl button.row:hover{background:var(--surface-2)}}
 .dl .av{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:.8rem;background:color-mix(in srgb,var(--tc) 14%,transparent);color:var(--tc)}
 .dl .nm{font-weight:650;display:flex;gap:6px;align-items:center;flex-wrap:wrap;min-width:0}
 .dl .mt{font-size:.8rem;color:var(--muted)}
@@ -271,8 +271,8 @@ mark{background:color-mix(in srgb,var(--accent) 22%,transparent);color:inherit;b
 .slots{display:flex;flex-wrap:wrap;gap:6px}
 .slot{min-width:64px;min-height:38px;border-radius:8px;border:1px solid var(--line);background:var(--surface);font-weight:650;font-size:.85rem;font-variant-numeric:tabular-nums}
 .slot.free{border-color:color-mix(in srgb,var(--ok) 45%,var(--line));color:var(--ok)}
-.slot.free:hover{background:color-mix(in srgb,var(--ok) 10%,var(--surface))}
-.slot.on{background:var(--ok);color:#fff;border-color:var(--ok)}
+@media (hover:hover){.slot.free:not(.on):hover{background:color-mix(in srgb,var(--ok) 10%,var(--surface))}}
+.slot.on,.slot.free.on{background:var(--ok);color:#fff;border-color:var(--ok)}
 .slot.busy,.slot.off{color:var(--muted);background:var(--surface-2);text-decoration:line-through;cursor:not-allowed}
 .slot.rchip{display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:6px 10px;text-align:left;min-height:46px;text-decoration:none;max-width:100%}
 .slot.rchip small{font-weight:500;font-size:.72rem;opacity:.9;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -293,7 +293,7 @@ input[type="date"]::-webkit-date-and-time-value{text-align:center;margin:0 auto;
 .ucard .grow{flex:1;min-width:0;display:flex;flex-direction:column}
 .ucard .grow small{color:var(--muted);font-size:.75rem}
 .ucard .tags{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:48%}
-.ucard:not(.off):hover{border-color:var(--accent)}
+@media (hover:hover){.ucard:not(.off):hover{border-color:var(--accent)}}
 .ucard.on{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 8%,var(--surface));box-shadow:0 0 0 1px var(--ok)}
 .ucard.off{opacity:.55;cursor:not-allowed}
 .telmsg{font-size:.76rem;font-weight:600;min-height:0}
@@ -396,7 +396,7 @@ table.cal{border-collapse:separate;border-spacing:0;min-width:100%}
 .grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
 @media (max-width:400px){.grid2{grid-template-columns:1fr}}
 .lc{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;display:flex;flex-direction:column;gap:10px;text-align:left;width:100%;min-width:0}
-button.lc:hover{border-color:var(--muted)}
+@media (hover:hover){button.lc:hover{border-color:var(--muted)}}
 .lc-h{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
 .lc-h b{font-size:1rem}
 .lc .meta{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.8rem;color:var(--muted)}
