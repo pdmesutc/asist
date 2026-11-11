@@ -278,8 +278,8 @@ mark{background:color-mix(in srgb,var(--accent) 22%,transparent);color:inherit;b
 #r_odalar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 #r_odalar .rchip{width:100%;min-width:0}
 @media (min-width:960px){#r_odalar{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}}
-input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width:100%;display:block;box-sizing:border-box}
-input[type="date"]::-webkit-date-and-time-value{text-align:left;margin:0}
+input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width:100%;box-sizing:border-box;display:flex;align-items:center;justify-content:center;text-align:center}
+input[type="date"]::-webkit-date-and-time-value{text-align:center;margin:0 auto;width:100%;min-height:1.25em;line-height:1.25}
 .slot.rchip.busy{text-decoration:none}
 .slot.rchip.busy b{text-decoration:line-through}
 .ulist{display:flex;flex-direction:column;gap:6px}
@@ -685,8 +685,23 @@ function demoFirmaDanisan(X){if(X.danisanlar.some(d=>d.id==='dfirma'))return;
 
 /* ============ Durum ============ */
 const KEY='asistpsikolog_v1',UIKEY='asistpsikolog_ui_v1';
+/* Sunucu modu: giriş ve hesaplar sunucuda (api/), şifreler tarayıcıda tutulmaz */
+const SUNUCU=!!document.querySelector('meta[name="ap-sunucu"]');
+const API={csrf:'',
+  async cagir(yol,veri){const o={method:veri?'POST':'GET',headers:{'X-Istek':'asistpsikolog'},credentials:'same-origin',cache:'no-store'};
+    if(veri){o.headers['Content-Type']='application/json';o.headers['X-Csrf']=API.csrf;o.body=JSON.stringify(veri)}
+    let r;try{r=await fetch('api/'+yol,o)}catch(e){throw new Error('Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin.')}
+    let j={};try{j=await r.json()}catch(e){}
+    if(j&&j.csrf)API.csrf=j.csrf;
+    if(r.status===401&&yol!=='giris'&&UI.rol){oturumDustu();}
+    if(!r.ok){const e=new Error((j&&j.hata)||'Bir hata oluştu, tekrar deneyin.');e.kod=r.status;throw e}
+    return j}};
 let S=null;
-try{const r=localStorage.getItem(KEY);if(r)S=JSON.parse(r)}catch(e){}
+if(!SUNUCU){try{const r=localStorage.getItem(KEY);if(r)S=JSON.parse(r)}catch(e){}}
+/* Sunucu modunda veri cihazda tutulmaz; girişten sonra sunucudan yüklenir */
+const KOLL=['subeler','odalar','uzmanlar','danisanlar','seanslar','masraflar','firmalar','uzmanOdemeleri','smsLog'],TEKIL=['fiyat','ayar','netgsm','sablon','kaynakDosya'];
+function bosS(){return{v:6,subeler:[],odalar:[],uzmanlar:[],danisanlar:[],seanslar:[],masraflar:[],firmalar:[],uzmanOdemeleri:[],smsLog:[],fiyat:{},ayar:{kdv:20,kdvDahil:true,yonetici:{email:''}},netgsm:{kod:'',sifre:'',baslik:'ASISTPSIKO'},sablon:{}}}
+if(SUNUCU)S=bosS();
 function migrate(){
 if(!S||!S.v)S=seed();
 if(S.v<2){S.firmalar.forEach(f=>{if(f.seansHakki==null)f.seansHakki=6});
@@ -702,11 +717,61 @@ if(S.v<5){S.ayar.yonetici=S.ayar.yonetici||{kullanici:'yonetici',sifre:'demo1234
 if(S.v<6){const y=S.ayar.yonetici;y.email=y.email||(y.kullanici&&y.kullanici.includes('@')?y.kullanici:'yonetici@asistpsikolog.com');delete y.kullanici;
   S.subeler.forEach((b,i)=>{if(b.asistan){b.asistan.email=b.asistan.email||(b.asistan.kullanici&&b.asistan.kullanici.includes('@')?b.asistan.kullanici:`asistan${i+1}@asistpsikolog.com`);delete b.asistan.kullanici}});S.v=6}
 }
-migrate();
+function sifreleriTemizle(){if(!SUNUCU)return;if(S.ayar&&S.ayar.yonetici)delete S.ayar.yonetici.sifre;(S.subeler||[]).forEach(b=>{if(b.asistan)delete b.asistan.sifre});(S.uzmanlar||[]).forEach(u=>{delete u.sifre})}
+migrate();sifreleriTemizle();
 let UI={rol:null,subeId:'pen',uzmanId:'u1',view:null,gozlem:false,per:{tip:'gun',ref:TODAY}};
 try{const r=localStorage.getItem(UIKEY);if(r){const o=JSON.parse(r);if(!('hatirla' in o))o.rol=null;UI=Object.assign(UI,o,{per:{tip:'gun',ref:TODAY}})}}catch(e){}
 try{const r=sessionStorage.getItem(UIKEY);if(r){const o=JSON.parse(r);if(o.rol)Object.assign(UI,o)}}catch(e){}
 {const h=(location.hash||'').slice(1);if(['yonetici','asistan','psikolog'].includes(h))UI.girisRol=h}
+if(SUNUCU){UI.rol=null;UI.gozlem=false}
+function oturumUygula(k){UI.hesap=k||null;if(!k){UI.rol=null;UI.gozlem=false;return}
+  UI.rol=k.rol;UI.gozlem=false;if(k.rol==='asistan')UI.subeId=k.kod;if(k.rol==='psikolog')UI.uzmanId=k.kod;
+  if(k.rol==='yonetici'&&S.ayar&&S.ayar.yonetici)S.ayar.yonetici.email=k.email}
+/* ---- Sunucu eşitlemesi: değişen kayıtlar gönderilir, başkalarının değişiklikleri 20 sn'de bir alınır ---- */
+const SENK={snap:{},zaman:'',yukleniyor:false,gidiyor:false,tekrar:false,bekleyenCiz:false,zamanlayici:null,
+  anahtar:(k,id)=>k+'\u0001'+id,
+  kayitlar(){const r=[];KOLL.forEach(k=>(S[k]||[]).forEach(x=>r.push([k,x.id,x])));TEKIL.forEach(t=>{if(S[t]!==undefined)r.push(['ayar',t,S[t]])});return r},
+  uygula(k,id,v){if(k==='ayar'){S[id]=v;return}const a=S[k]||(S[k]=[]);const i=a.findIndex(x=>x.id===id);if(i<0)a.push(v);else a[i]=v},
+  kaldir(k,id){if(k==='ayar'){delete S[id];return}if(S[k])S[k]=S[k].filter(x=>x.id!==id)},
+  async yukle(){SENK.yukleniyor=true;try{const o=await API.cagir('veri');const yeni=bosS();delete yeni.fiyat;delete yeni.sablon;S=yeni;SENK.snap={};
+      o.kayitlar.forEach(r=>{SENK.uygula(r.k,r.id,r.v);SENK.snap[SENK.anahtar(r.k,r.id)]={j:JSON.stringify(r.v),s:r.s}});
+      if(!S.fiyat)S.fiyat={};if(!S.sablon)S.sablon={};if(!S.ayar.yonetici)S.ayar.yonetici={email:''};
+      SENK.zaman=o.zaman;idx();SENK.dinle();return o.kayitlar.length}finally{SENK.yukleniyor=false}},
+  degisiklikler(){const d=[],gorulen=new Set();
+    SENK.kayitlar().forEach(([k,id,v])=>{const a=SENK.anahtar(k,id);gorulen.add(a);const j=JSON.stringify(v),o=SENK.snap[a];if(!o||o.j!==j)d.push({k,id,s:o?o.s:0,v,_j:j})});
+    Object.keys(SENK.snap).forEach(a=>{if(!gorulen.has(a)){const[k,id]=a.split('\u0001');d.push({k,id,s:SENK.snap[a].s,sil:1})}});
+    return d.sort((x,y)=>(x.sil?1:0)-(y.sil?1:0))},
+  async gonder(){if(!SUNUCU||!UI.rol||SENK.yukleniyor)return;if(SENK.gidiyor){SENK.tekrar=true;return}
+    const d=SENK.degisiklikler();if(!d.length)return;SENK.gidiyor=true;
+    try{for(let i=0;i<d.length;i+=500){const p=d.slice(i,i+500);
+        const o=await API.cagir('kaydet',{d:p.map(({_j,...x})=>x)});
+        const sm=new Map(o.surumler.map(x=>[SENK.anahtar(x.k,x.id),x.s]));
+        p.forEach(x=>{const a=SENK.anahtar(x.k,x.id);if(x.sil)delete SENK.snap[a];else SENK.snap[a]={j:x._j,s:sm.get(a)}})}}
+    catch(e){if(e.kod===401)return;toast(e.message,1);try{await SENK.yukle();render()}catch(x){}}
+    finally{SENK.gidiyor=false;if(SENK.tekrar){SENK.tekrar=false;SENK.gonder()}}},
+  async cek(){if(!UI.rol||SENK.gidiyor||SENK.yukleniyor||document.hidden||!SENK.zaman)return;
+    try{const o=await API.cagir('veri?sonra='+encodeURIComponent(SENK.zaman));if(!o.kayitlar.length){SENK.zaman=o.zaman;return}
+      if(SENK.gidiyor||SENK.degisiklikler().length)return;
+      o.kayitlar.forEach(r=>{const a=SENK.anahtar(r.k,r.id);if(r.sil){SENK.kaldir(r.k,r.id);delete SENK.snap[a]}else{SENK.uygula(r.k,r.id,r.v);SENK.snap[a]={j:JSON.stringify(r.v),s:r.s}}});
+      SENK.zaman=o.zaman;idx();if($('#modal').innerHTML||document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName))SENK.bekleyenCiz=true;else render()}catch(e){}},
+  dinle(){if(SENK.zamanlayici)return;SENK.zamanlayici=setInterval(SENK.cek,20000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)SENK.cek()})},
+  durdur(){clearInterval(SENK.zamanlayici);SENK.zamanlayici=null;SENK.snap={};SENK.zaman='';S=bosS();idx()}};
+// Sunucu boşsa (ilk kurulum) yönetici demo verisini yükleyebilir
+async function demoYukle(el){if(el){el.disabled=true;el.textContent='Yükleniyor…'}
+  try{const eski=S;S=null;migrate();sifreleriTemizle();const tum=SENK.kayitlar().map(([k,id,v])=>({k,id,s:0,v}));S=eski;
+    for(let i=0;i<tum.length;i+=500){await API.cagir('kaydet',{d:tum.slice(i,i+500)});if(el)el.textContent=`Yükleniyor… %${Math.round(100*Math.min(tum.length,i+500)/tum.length)}`}
+    await SENK.yukle();kapat();render();toast('Demo verileri sunucuya yüklendi.')}
+  catch(e){toast(e.message,1);if(el){el.disabled=false;el.textContent='Demo verilerini yükle'}}}
+function vBosSunucu(){return`<div class="auth"><main class="auth-main"><div class="auth-card"><div style="display:flex;justify-content:center">${LOGO("full",40)}</div>
+  <h1 style="font-size:20px;margin:8px 0 0">Sistemde henüz veri yok</h1>
+  <p class="small muted" style="margin:0">Şubeler, uzmanlar ve danışanlar sunucuya henüz yüklenmedi. Denemek için demo verilerini yükleyebilirsiniz; gerçek verilere geçmeden önce bunlar silinecek.</p>
+  <button class="btn primary lg block" data-act="demoYukle">Demo verilerini yükle</button>
+  <button class="btn block" data-act="cikis">Çıkış yap</button></div></main></div>`}
+async function girisSonrasi(k){await SENK.yukle();
+  if(!S.subeler.length&&k.rol!=='yonetici')throw new Error('Sistemde henüz kayıt yok. Yöneticinin kurulumu tamamlaması gerekiyor.');
+  oturumUygula(k);
+  if(S.subeler.length&&!oturumGecerli()){oturumUygula(null);throw new Error('Hesabınız sistemdeki kayıtlarla eşleşmedi. Yöneticiyle iletişime geçin.')}}
+function oturumDustu(){SENK.durdur();oturumUygula(null);try{kapat()}catch(e){}render();toast('Oturumunuzun süresi doldu. Lütfen yeniden giriş yapın.',1)}
 let M={};
 function idx(){M={d:new Map(S.danisanlar.map(x=>[x.id,x])),u:new Map(S.uzmanlar.map(x=>[x.id,x])),o:new Map(S.odalar.map(x=>[x.id,x])),s:new Map(S.seanslar.map(x=>[x.id,x])),f:new Map(S.firmalar.map(x=>[x.id,x])),b:new Map(S.subeler.map(x=>[x.id,x]))};_cnt=null;_sorted=null}
 let _cnt=null,_sorted=null;
@@ -716,11 +781,11 @@ const IDB={db:null,open(){return new Promise((res,rej)=>{try{const r=indexedDB.o
   async get(k){const db=this.db||(this.db=await this.open());return new Promise((res,rej)=>{const q=db.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)})},
   async set(k,v){const db=this.db||(this.db=await this.open());return new Promise((res,rej)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);tx.onabort=()=>rej(tx.error)})}};
 let _hazir=false;
-function save(){if(!_hazir)return;IDB.set(KEY,S).then(()=>{try{localStorage.removeItem(KEY)}catch(e){}}).catch(()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Veriler kaydedilemedi: tarayıcının depolama alanı dolu.',1)}})}
+function save(){if(!_hazir||SUNUCU)return;IDB.set(KEY,S).then(()=>{try{localStorage.removeItem(KEY)}catch(e){}}).catch(()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Veriler kaydedilemedi: tarayıcının depolama alanı dolu.',1)}})}
 function saveUI(){const o={rol:UI.rol,subeId:UI.subeId,uzmanId:UI.uzmanId,view:UI.view,hatirla:!!UI.hatirla,girisRol:UI.girisRol};
   try{localStorage.setItem(UIKEY,JSON.stringify(UI.hatirla?o:{...o,rol:null}))}catch(e){}try{sessionStorage.setItem(UIKEY,JSON.stringify(o))}catch(e){}}
 function oturumGecerli(){if(UI.rol==='psikolog'){const u=U(UI.uzmanId);return!!(u&&u.aktif)}if(UI.rol==='asistan')return!!B(UI.subeId);return UI.rol==='yonetici'}
-function commit(){save();idx();render()}
+function commit(){save();idx();render();if(SUNUCU)SENK.gonder()}
 idx();
 
 function sayac(){ if(_cnt)return _cnt; _cnt={};S.seanslar.forEach(s=>{if(s.durum!=='iptal')_cnt[s.danisanId]=(_cnt[s.danisanId]||0)+1});return _cnt}
@@ -780,7 +845,27 @@ function takipEden(did){
 }
 
 /* ============ SMS ============ */
+/* Şubeye özel SMS şablonları: S.sablon.sube[şubeId][anahtar]; tanımsızsa varsayılan metin */
+const SABLON_TIP=[['d_yeni','Danışan · yeni randevu'],['d_online','Danışan · yeni online randevu'],['d_degisiklik','Danışan · randevu tarihi değişikliği'],['d_iptal','Danışan · randevu iptali'],['d_hatirlatma','Danışan · randevu hatırlatma'],
+  ['p_yeni','Psikolog · yeni randevu'],['p_online','Psikolog · yeni online randevu'],['p_degisiklik','Psikolog · randevu tarihi değişikliği'],['p_iptal','Psikolog · randevu iptali'],['p_hatirlatma','Psikolog · randevu hatırlatma']];
+const SABLON_VARS=[['DANISAN_ISIM','Danışan adı'],['TARIH','Randevu tarihi'],['SAAT','Randevu saati'],['PSK_ISIM','Psikolog adı'],['ODA_NAME','Oda'],['LOKASYON','Şube adı'],['ONLINE_LINK','Online görüşme linki'],['SUBE_HARITA','Şube konum linki'],['SUBE_TEL','Şube telefonu'],['SUBE_ADRES','Şube adresi']];
+const SABLON_VARSAYILAN={
+  p_online:'[DANISAN_ISIM] isimli danışan ile [TARIH] - [SAAT] tarihli yeni online randevu oluşturulmuştur. Randevu saatinde [ONLINE_LINK] adresinden görüşmeye başlayabilirsiniz.',
+  p_yeni:'[DANISAN_ISIM] isimli danışan ile [LOKASYON] lokasyonunda [TARIH] - [SAAT] tarihli yeni randevu oluşturulmuştur.',
+  p_degisiklik:'[DANISAN_ISIM] isimli danışanın randevu tarihi değişmiştir. Yeni randevu: [LOKASYON] - [TARIH] [SAAT]',
+  p_iptal:'[DANISAN_ISIM] isimli danışan ile [TARIH] - [SAAT] tarihli randevunuz iptal edilmiştir.',
+  p_hatirlatma:'[TARIH] - [SAAT] tarihinde [LOKASYON] lokasyonunda [DANISAN_ISIM] isimli danışan ile randevunuz bulunmaktadır.',
+  d_online:'[TARIH] - [SAAT] tarih ve saatinde [PSK_ISIM] isimli psikolog ile online görüşmeniz bulunmaktadır. Görüşmeye [ONLINE_LINK] adresinden katılabilirsiniz.',
+  d_yeni:'[LOKASYON] lokasyonunda [PSK_ISIM] isimli psikolog ile randevunuz oluşturulmuştur. Randevu tarihi ve saati: [TARIH] - [SAAT]. Konum: [SUBE_HARITA]',
+  d_degisiklik:'Randevu tarihiniz değişmiştir. Yeni görüşme tarihi: [TARIH] - [SAAT]',
+  d_iptal:'[PSK_ISIM] isimli psikolog ile [TARIH] - [SAAT] tarihli seansınız iptal edilmiştir.',
+  d_hatirlatma:'[TARIH] - [SAAT] tarih ve saatinde [LOKASYON] lokasyonunda [PSK_ISIM] isimli psikolog ile randevunuz bulunmaktadır. Konum: [SUBE_HARITA]'};
+function sablonAl(subeId,k){const t=S.sablon&&S.sablon.sube&&S.sablon.sube[subeId];return t&&typeof t[k]==='string'&&t[k].trim()?t[k]:SABLON_VARSAYILAN[k]||''}
+const onlineMi=s=>{const o=O(s.odaId);return!!o&&/online|skype/i.test(o.tur||'')};
+const onlineLink=s=>(s.onlineLink||(U(s.uzmanId)||{}).onlineLink||'').trim();
 function doldur(t,s){const d=D(s.danisanId),u=U(s.uzmanId),sb=B(s.subeId),o=O(s.odaId);
+  const V={DANISAN_ISIM:d?d.ad:'',TARIH:fmtD(s.tarih,{day:'numeric',month:'long',year:'numeric'}),SAAT:s.saat,PSK_ISIM:u?u.ad:'',ODA_NAME:o?o.ad:'',LOKASYON:sb?sb.ad:'',ONLINE_LINK:onlineLink(s),SUBE_HARITA:sb?sb.harita||'':'',SUBE_TEL:sb?sb.tel||'':'',SUBE_ADRES:sb?sb.adres||'':''};
+  t=t.replace(/\[([A-Z_]+)\]/g,(m,k)=>k in V?V[k]:m);
   return t.replace(/\{danisan\}/g,d?d.ad:'').replace(/\{tarih\}/g,fmtD(s.tarih,{day:'numeric',month:'long'})).replace(/\{saat\}/g,s.saat).replace(/\{sube\}/g,sb?sb.ad:'')
   .replace(/\{uzman\}/g,u?u.ad:'').replace(/\{oda\}/g,o?o.ad:'').replace(/\{tur\}/g,s.tur).replace(/\{subetel\}/g,sb?sb.tel||'':'')}
 function alicilar(d){const a=[];if(!d)return a;
@@ -789,15 +874,25 @@ function alicilar(d){const a=[];if(!d)return a;
   if(d.sms.anne&&d.anne&&d.anne.tel)a.push({ad:d.anne.ad,tel:d.anne.tel});
   if(d.sms.baba&&d.baba&&d.baba.tel)a.push({ad:d.baba.ad,tel:d.baba.tel});
   if(d.sms.veli&&d.veli&&d.veli.tel)a.push({ad:d.veli.ad,tel:d.veli.tel});return a}
-function smsAt(tip,s,list){const metin=doldur(S.sablon[tip]||'',s);const zaman=new Date().toISOString();
-  list.forEach(a=>S.smsLog.unshift({id:uid('m'),zaman,tip,alici:a.ad,tel:a.tel,metin,durum:S.netgsm.kod?'NetGSM kuyruğu':'Simülasyon',subeId:s.subeId}));
+/* Sunucu modunda SMS'ler toplanıp tek istekte sunucuya gönderilir; sunucu NetGSM'e iletir */
+const SMSQ={k:[],t:null,ekle(x){SMSQ.k.push(x);if(!SMSQ.t)SMSQ.t=setTimeout(SMSQ.gonder,60)},
+  async gonder(){SMSQ.t=null;const l=SMSQ.k.splice(0);if(!l.length)return;const gecerli=l.filter(x=>/^5\d{9}$/.test(normTel(x.tel)));const sonuc=new Map();let hata='';
+    for(let i=0;i<gecerli.length;i+=300){const p=gecerli.slice(i,i+300);
+      try{const o=await API.cagir('sms',{mesajlar:p.map(x=>({tel:normTel(x.tel),metin:x.metin}))});const atl=new Set(o.atlanan||[]);p.forEach(x=>sonuc.set(x.id,o.simulasyon?'Simülasyon':atl.has(normTel(x.tel))?'Test modu · gönderilmedi':'Gönderildi'))}
+      catch(e){hata=e.message;p.forEach(x=>sonuc.set(x.id,'Gönderilemedi'))}}
+    l.forEach(x=>{const r=S.smsLog.find(y=>y.id===x.id);if(r)r.durum=sonuc.get(x.id)||'Geçersiz numara'});
+    if(hata)toast('SMS gönderilemedi: '+hata,1);commit()}};
+function smsAt(tip,s,list){const sab=sablonAl(s.subeId,tip);if(!list.length)return 0;
+  if(sab.includes('[ONLINE_LINK]')&&!onlineLink(s)){toast(`SMS gönderilmedi: ${(U(s.uzmanId)||{}).ad||'Uzman'} için online görüşme linki tanımlı değil (Uzmanlar sayfası).`,1);return 0}
+  const metin=doldur(sab,s);const zaman=new Date().toISOString();
+  list.forEach(a=>{const id=uid('m');S.smsLog.unshift({id,zaman,tip,alici:a.ad,tel:a.tel,metin,durum:SUNUCU?'Gönderiliyor':S.netgsm.kod?'NetGSM kuyruğu':'Simülasyon',subeId:s.subeId});if(SUNUCU)SMSQ.ekle({id,tel:a.tel,metin})});
   S.smsLog=S.smsLog.slice(0,400);return list.length}
-function smsDanisanVeUzman(tip,s,uzmanaDa){let n=smsAt(tip,s,alicilar(D(s.danisanId)));const u=U(s.uzmanId);if(uzmanaDa&&u.sms)n+=smsAt('uzman',s,[{ad:u.ad,tel:u.tel}]);return n}
+function smsDanisanVeUzman(tip,s,uzmanaDa){const t=tip==='yeni'&&onlineMi(s)?'online':tip;let n=smsAt('d_'+t,s,alicilar(D(s.danisanId)));const u=U(s.uzmanId);if(uzmanaDa&&u&&u.sms&&u.tel)n+=smsAt('p_'+t,s,[{ad:u.ad,tel:u.tel}]);return n}
 
 /* ============ UI çekirdeği ============ */
 function toast(m,err){const r=$('#toast-root');r.innerHTML=`<div class="toast ${err?'err':''}" role="status">${esc(m)}</div>`;clearTimeout(toast.t);toast.t=setTimeout(()=>r.innerHTML='',3200)}
 function sheet(title,body,foot){$('#modal').innerHTML=`<div class="sheet-bg" data-act="kapat"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="sheet-h"><h2>${title}</h2><button class="icon-btn" data-act="kapat" aria-label="Kapat">${ic('x')}</button></div><div class="sheet-b">${body}</div>${foot?`<div class="sheet-f">${foot}</div>`:''}</div>`;document.body.classList.add('noscroll');telAlanlariniKontrolEt();const f=$('#modal .sheet-b input,#modal .sheet-b select');if(f&&window.innerWidth>700)f.focus()}
-function kapat(){$('#modal').innerHTML='';document.body.classList.remove('noscroll')}
+function kapat(){$('#modal').innerHTML='';document.body.classList.remove('noscroll');if(SUNUCU&&SENK.bekleyenCiz){SENK.bekleyenCiz=false;setTimeout(render,0)}}
 const fld=(lab,inner)=>`<label class="field"><span>${lab}</span>${inner}</label>`;
 const val=id=>{const e=document.getElementById(id);return e?e.value.trim():''};
 const chk=id=>{const e=document.getElementById(id);return!!(e&&e.checked)};
@@ -810,11 +905,13 @@ const NAV={
   yonetici:[['ozet','Genel Bakış','grid'],['ykasa','Şube Kasası','wallet'],['ygider','Giderler','receipt'],['subeler','Şubeler & Odalar','building'],['uzmanlar','Uzmanlar','users'],['fiyat','Hizmet & Fiyat','tag'],['firmalar','Kurumsal Firmalar','brief'],['smsayar','SMS Merkezi','msg'],['aktar','Veri Aktarımı','dl']],
   asistan:[['gorusmeler','Görüşmeler','list'],['takvim','Oda Takvimi','cal'],['randevu','Yeni Randevu','plus'],['danisanlar','Danışanlar','users'],['kasa','Şube Kasası','wallet'],['giderler','Giderler','receipt'],['sms','Toplu SMS','msg'],['firma','Firma Raporu','brief']],
   psikolog:[['ajanda','Görüşmeler','list'],['danisanlarim','Danışanlar','users'],['kendi','Yeni Randevu','plus'],['hakedis','Hak Ediş','wallet'],['musaitlik','Müsaitlik','clock']]};
+if(SUNUCU)NAV.yonetici=NAV.yonetici.filter(x=>x[0]!=='aktar');
 const rolAd={yonetici:'Yönetici',asistan:'Asistan',psikolog:'Psikolog'};
 const aktifRol=()=>UI.gozlem?'asistan':UI.rol;
 
 function render(){
   const app=$('#app');
+  if(SUNUCU&&UI.rol==='yonetici'&&!S.subeler.length){app.innerHTML=vBosSunucu();return}
   if(UI.rol&&!oturumGecerli()){UI.rol=null;saveUI()}
   if(!UI.rol){app.innerHTML=vLogin();saveUI();const k=$('#g_k');if(k&&window.innerWidth>900)k.focus();return}
   const rol=aktifRol();const items=NAV[rol];
@@ -831,7 +928,7 @@ function render(){
       <div class="brand">${LOGO("full",36)}</div>
       <div class="navgrp">${rolAd[rol]} paneli</div>
       ${items.map(i=>`<button class="nv ${i[0]===UI.view?'on':''}" data-act="go" data-v="${i[0]}">${ic(i[2])}${i[1]}</button>`).join('')}
-      <div class="foot">${S.kaynakDosya?'':'Demo sürüm · '}veriler bu tarayıcıda saklanır</div>
+      <div class="foot">${SUNUCU?'Veriler sunucuda, şifreli saklanır':(S.kaynakDosya?'':'Demo sürüm · ')+'veriler bu tarayıcıda saklanır'}</div>
     </aside>
     <div class="main">
       <header class="top"><div class="top-in">
@@ -863,10 +960,10 @@ function vLogin(){
     <div class="seg auth-seg" role="radiogroup" aria-label="Panel">${[['asistan','Asistan'],['psikolog','Psikolog'],['yonetici','Yönetici']].map(([k,l])=>`<label><input type="radio" name="g_rol" value="${k}" ${k===(UI.girisRol||'asistan')?'checked':''} data-chg="girisRol">${l}</label>`).join('')}</div>
     <label class="field"><span>E-posta</span><input id="g_k" name="email" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" inputmode="email" placeholder="E-posta adresiniz"></label>
     <label class="field"><span>Şifre</span><div class="pw"><input id="g_s" name="password" type="password" autocomplete="current-password" placeholder="Şifreniz"><button type="button" class="pw-btn" data-act="sifreGoster" aria-label="Şifreyi göster">${ic('eye')}</button></div></label>
-    <div class="auth-row"><label class="chk"><input type="checkbox" id="g_hatirla" ${UI.hatirla?'checked':''}> Beni hatırla</label><button type="button" class="linkbtn" data-act="sifreUnut">Şifremi unuttum</button></div>
+    <div class="auth-row">${SUNUCU?'<span></span>':`<label class="chk"><input type="checkbox" id="g_hatirla" ${UI.hatirla?'checked':''}> Beni hatırla</label>`}<button type="button" class="linkbtn" data-act="sifreUnut">Şifremi unuttum</button></div>
     <div id="g_hata" class="cmsg err" role="alert" hidden></div>
     <button type="submit" class="btn primary lg block" id="g_btn">Giriş Yap</button>
-    ${S.kaynakDosya?'':`<details class="auth-demo"><summary>Demo hesapları</summary><div class="auth-demo-in"><span class="small muted">Bu sürüm tanıtım amaçlıdır. Bir hesaba dokunun, bilgiler doldurulsun. Şifrelerin hepsi <b>demo1234</b>.</span>
+    ${SUNUCU||S.kaynakDosya?'':`<details class="auth-demo"><summary>Demo hesapları</summary><div class="auth-demo-in"><span class="small muted">Bu sürüm tanıtım amaçlıdır. Bir hesaba dokunun, bilgiler doldurulsun. Şifrelerin hepsi <b>demo1234</b>.</span>
       ${demo.map(([r,k,ad])=>`<button type="button" class="auth-demo-btn" data-act="demoDoldur" data-r="${r}" data-k="${esc(k)}"><b>${esc(ad)} <small class="muted">· ${ROL_AD[r]}</small></b><span>${esc(k)}</span></button>`).join('')}</div></details>`}
     <a class="auth-back-m" href="anasayfa.html">← Tanıtım sayfasına dön</a>
   </form></main></div>`}
@@ -1194,7 +1291,7 @@ function vSms(){const t=UI.smsT||addDays(TODAY,1);
    <div class="dl">${list.map(s=>{const d=D(s.danisanId);const a=alicilar(d);return`<label class="row" style="display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--accent)" data-chg="smsSec" data-id="${s.id}" ${UI.smsSel.ids.has(s.id)?'checked':''}><span style="min-width:0"><b>${s.saat} · ${esc(d.ad)}</b><span class="mt" style="display:block;font-size:.8rem;color:var(--muted)">${esc(U(s.uzmanId).ad)} · ${a.length?a.map(x=>esc(x.ad.split(' ')[0])).join(', '):'SMS izni yok'}</span></span><span class="small muted">${a.length} alıcı</span></label>`}).join('')}</div>`:`<div class="empty"><b>${fmtD(t,{day:'numeric',month:'long'})} için bekleyen seans yok</b>Başka bir tarih seçin.</div>`}
   </div>
   <div class="card"><h2>Mesaj</h2>
-   <div class="smsprev">${sel.length?esc(doldur(S.sablon.hatirlatma,sel[0])):'<span class="muted">Önizleme için seans seçin.</span>'}</div>
+   <div class="smsprev">${sel.length?esc(doldur(sablonAl(sel[0].subeId,'d_hatirlatma'),sel[0])):'<span class="muted">Önizleme için seans seçin.</span>'}</div>
    <span class="small muted">Şablon Yönetici &gt; SMS Merkezi’nden düzenlenir. Her danışana kendi bilgileriyle gönderilir.</span>
    <label class="sw"><span>Uzmanlara da seans bilgisini gönder</span><input type="checkbox" id="smsUz" checked><i></i></label>
    <button class="btn primary lg block" data-act="smsGonder" ${sel.length?'':'disabled'}>${ic('send')}${sel.length} seans · ${nAl} danışan SMS’i gönder</button>
@@ -1259,11 +1356,12 @@ function uzListHTML(){const q=(UI.uzq||'').trim();const ql=low(q),qd=digits(q);
 function uzDuz(id){const u=id?U(id):{ad:'',tel:'',email:'',sifre:'',alanlar:['Yetişkin'],subeIds:[UI.subeId||S.subeler[0].id],oranKendi:30,oranYonlendirme:50,telGor:true,sms:true,aktif:true};
   sheet(id?'Uzmanı düzenle':'Yeni uzman',`${fld('Ad soyad / unvan',`<input id="u_ad" value="${esc(u.ad)}" placeholder="Uzm. Psk. Ad Soyad">`)}
   <div class="row2">${fld('Telefon',`<input id="u_tel" type="tel" data-tel inputmode="numeric" placeholder="5XXXXXXXXX" autocomplete="off" value="${esc(u.tel)}">`)}${fld('E-posta (giriş)',`<input id="u_email" type="email" value="${esc(u.email)}">`)}</div>
-  ${fld('Giriş şifresi',`<input id="u_sifre" type="text" value="${esc(u.sifre)}">`)}
+  ${fld('Giriş şifresi',`<input id="u_sifre" type="text" autocomplete="off" value="${SUNUCU?'':esc(u.sifre)}" placeholder="${SUNUCU?(id?'Değiştirmek için yeni şifre':'En az 10 karakter'):''}">`)}
   <div><span class="lbl">Uzmanlık alanları</span><div class="chips" style="margin-top:6px">${TURLER.map(t=>`<label class="chip"><input type="checkbox" name="u_alan" value="${t}" ${u.alanlar.includes(t)?'checked':''}>${t}</label>`).join('')}</div></div>
   <div><span class="lbl">Görev yaptığı şubeler</span><div class="chips" style="margin-top:6px">${S.subeler.map(s=>`<label class="chip"><input type="checkbox" name="u_sube" value="${s.id}" ${u.subeIds.includes(s.id)?'checked':''}>${esc(s.ad)}</label>`).join('')}</div></div>
   <div class="row2">${fld('Kendi danışanı · ofis payı %',`<input id="u_ok" type="number" min="0" max="100" value="${u.oranKendi}">`)}${fld('Ofis danışanı · ofis payı %',`<input id="u_oy" type="number" min="0" max="100" value="${u.oranYonlendirme}">`)}</div>
   <div class="small muted">Örnek: 2.000 ₺ yönlendirme seansında KDV sonrası matrahın %${u.oranYonlendirme}’i ofise, kalanı uzmana yazılır.</div>
+  ${fld('Online görüşme linki',`<input id="u_link" type="url" inputmode="url" autocapitalize="none" spellcheck="false" placeholder="https://meet.google.com/... veya Zoom linki" value="${esc(u.onlineLink||'')}">`)}
   <label class="sw"><span>Danışan telefonlarını görebilir</span><input type="checkbox" id="u_telgor" ${u.telGor?'checked':''}><i></i></label>
   <label class="sw"><span>Seans bilgilendirme SMS’i alsın</span><input type="checkbox" id="u_sms" ${u.sms?'checked':''}><i></i></label>
   ${id&&u.aktif?(()=>{const n=S.seanslar.filter(s=>s.uzmanId===id&&s.durum==='bekliyor'&&!gecti(s)).length;return n?`<div class="small muted">${n} aktif seansı olduğu için şu an pasife alınamaz.</div>`:''})():''}`,
@@ -1292,14 +1390,24 @@ function firmaDuz(id){const f=id?F(id):{ad:'',vergi:'',adres:'',yetkili:'',subeI
   <div class="chips" id="f_uzlar" style="margin-top:8px" ${f.uzmanKisit==='tum'?'hidden':''}>${S.uzmanlar.filter(u=>u.aktif).map(u=>`<label class="chip"><input type="checkbox" name="f_uz" value="${u.id}" ${f.uzmanIds.includes(u.id)?'checked':''}>${esc(u.ad)}</label>`).join('')}</div></div>`,
   `<button class="btn" data-act="kapat">Vazgeç</button><button class="btn primary" data-act="firmaKaydet" data-id="${id||''}">Kaydet</button>`)}
 
-function vSmsAyar(){const n=S.netgsm;const L={yeni:'Danışan · yeni randevu',iptal:'Danışan · iptal',degisiklik:'Danışan · değişiklik',hatirlatma:'Danışan · hatırlatma',uzman:'Uzman · seans bilgilendirme'};
+function sablonFormuAl(){if(!$('#sb_d_yeni')||!UI.smsSube)return;S.sablon.sube=S.sablon.sube||{};const t=S.sablon.sube[UI.smsSube]={...(S.sablon.sube[UI.smsSube]||{})};
+  SABLON_TIP.forEach(([k])=>{const v=$('#sb_'+k).value;if(v.trim()&&v!==SABLON_VARSAYILAN[k])t[k]=v;else delete t[k]})}
+function smsKarakter(t){const n=t.replace(/\[(DANISAN_ISIM|PSK_ISIM)\]/g,'x'.repeat(18)).replace(/\[TARIH\]/g,'x'.repeat(15)).replace(/\[(ONLINE_LINK|SUBE_HARITA)\]/g,'x'.repeat(40)).replace(/\[[A-Z_]+\]/g,'x'.repeat(10)).length;return`≈${n} karakter · ${n<=155?1:Math.ceil(n/150)} SMS (isimler ve tarihle birlikte)`}
+function vSmsAyar(){const n=S.netgsm;UI.smsSube=S.subeler.some(b=>b.id===UI.smsSube)?UI.smsSube:(S.subeler[0]||{}).id;const sb=UI.smsSube;
+  const kutu=([k,l])=>{const v=sablonAl(sb,k);return fld(l,`<textarea id="sb_${k}" data-in="sbSay" rows="3">${esc(v)}</textarea><span class="small muted" id="sbc_${k}">${smsKarakter(v)}</span>`)};
   return`<div class="page-head"><div><h1>SMS Merkezi</h1><p>NetGSM entegrasyonu ve otomatik mesaj şablonları</p></div></div>
-  <div class="form-grid"><div class="card"><h2>NetGSM API</h2>${fld('Kullanıcı kodu',`<input id="n_kod" value="${esc(n.kod)}" placeholder="850xxxxxxx">`)}${fld('API şifresi',`<input id="n_sifre" type="password" value="${esc(n.sifre)}">`)}${fld('SMS başlığı (gönderici adı)',`<input id="n_baslik" value="${esc(n.baslik)}" maxlength="11">`)}
-   <div class="small muted">Gerçek gönderim için şifre sunucu tarafında saklanmalıdır. Bu demoda gönderimler kayıt altına alınır, operatöre iletilmez.</div>
+  ${SUNUCU?'<div class="cmsg" id="smsMod" hidden></div>':''}
+  <div class="form-grid"><div class="card"><h2>NetGSM API</h2>${fld('Kullanıcı kodu',`<input id="n_kod" value="${esc(n.kod)}" placeholder="850xxxxxxx">`)}${fld('API şifresi',`<input id="n_sifre" type="password" autocomplete="new-password" value="${SUNUCU?'':esc(n.sifre)}" placeholder="${SUNUCU&&n.bagli?'Kayıtlı · değiştirmek için yazın':''}">`)}${fld('SMS başlığı (gönderici adı)',`<input id="n_baslik" value="${esc(n.baslik)}" maxlength="11">`)}
+   <div class="small muted">${SUNUCU?(n.bagli?'NetGSM bağlı. Şifre yalnızca sunucuda, şifreli olarak saklanır; tarayıcıya gönderilmez.':'NetGSM bilgileri girilene kadar mesajlar gönderilmez, yalnızca kayıt altına alınır.'):'Gerçek gönderim için şifre sunucu tarafında saklanmalıdır. Bu demoda gönderimler kayıt altına alınır, operatöre iletilmez.'}</div>
    <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" data-act="netgsmTest">Bağlantıyı test et</button></div>
-   <h2 style="margin-top:10px">Demo verisi</h2><span class="small muted">Tüm kayıtları silip örnek verileri yeniden yükler.</span><div><button class="btn danger" data-act="sifirla">Demo verisini sıfırla</button></div></div>
-  <div class="card"><h2>Mesaj şablonları</h2><div class="small muted">Değişkenler: ${['danisan','tarih','saat','sube','uzman','oda','tur','subetel'].map(v=>`<span class="tpl">{${v}}</span>`).join(' ')}</div>
-   ${Object.entries(L).map(([k,l])=>fld(l,`<textarea id="sb_${k}" data-in="sbSay">${esc(S.sablon[k])}</textarea><span class="small muted" id="sbc_${k}">${S.sablon[k].length} karakter</span>`)).join('')}</div>
+   ${SUNUCU?'':`<h2 style="margin-top:10px">Demo verisi</h2><span class="small muted">Tüm kayıtları silip örnek verileri yeniden yükler.</span><div><button class="btn danger" data-act="sifirla">Demo verisini sıfırla</button></div>`}</div>
+  <div class="card"><h2>Mesaj şablonları</h2>
+   <div class="seg" style="display:flex">${S.subeler.map(b=>`<button class="${b.id===sb?'on':''}" data-act="smsSube" data-id="${b.id}" style="flex:1">${esc(b.ad)}</button>`).join('')}</div>
+   <div class="small muted">Her şubenin mesajları ayrıdır. Kullanılabilecek kısaltmalar: ${SABLON_VARS.map(([k,l])=>`<span class="tpl" title="${esc(l)}">[${k}]</span>`).join(' ')}</div>
+   <div class="small muted">Online randevu mesajları, randevu "Online" veya "Skype" türündeki bir odaya verildiğinde gider; [ONLINE_LINK] uzmanın kartındaki online görüşme linkidir.</div>
+   <h3 style="margin:6px 0 0">Danışana giden mesajlar</h3>${SABLON_TIP.filter(x=>x[0][0]==='d').map(kutu).join('')}
+   <h3 style="margin:6px 0 0">Psikoloğa giden mesajlar</h3>${SABLON_TIP.filter(x=>x[0][0]==='p').map(kutu).join('')}
+   ${S.subeler.length>1?`<div><button class="btn sm" data-act="smsSablonHepsine">Bu şablonları diğer şubelere de uygula</button></div>`:''}</div>
   <div class="fa"><button class="btn primary lg" data-act="smsAyarKaydet">Ayarları kaydet</button></div></div>`}
 
 /* ============ PSİKOLOG ============ */
@@ -1334,6 +1442,9 @@ function vMusaitlik(){const u=U(UI.uzmanId);UI.ms=u.subeIds.includes(UI.ms)?UI.m
   const saatler=SAATLER.filter(h=>h>=sb.acilis&&h<sb.kapanis);
   return`<div class="page-head"><div><h1>Müsaitlik</h1><p>Asistanlar yalnızca işaretlediğiniz saatlere randevu verebilir.</p></div></div>
   <div class="cmsg" style="background:var(--surface);border:1px solid var(--line);color:var(--ink)"><span>${ic('clock')} <b>${esc(sb.ad)}</b> şubesi çalışma saatleri: <b>${sb.acilis}–${sb.kapanis}</b>. Saatler yönetici panelindeki şube ayarlarından gelir; bu aralığın dışı seçilemez.</span></div>
+  <div class="card"><h2>Online görüşme linkim</h2>
+    <span class="small muted">Online odaya verilen randevularda bu link size ve danışana SMS ile gönderilir. Google Meet veya Zoom'daki sabit görüşme linkinizi yazın.</span>
+    <div class="row2" style="align-items:end">${fld('Link',`<input id="ms_link" type="url" inputmode="url" autocapitalize="none" spellcheck="false" placeholder="https://meet.google.com/abc-defg-hij" value="${esc(u.onlineLink||'')}">`)}<div><button class="btn primary" data-act="linkKaydet">Kaydet</button></div></div></div>
   ${u.subeIds.length>1?`<div class="seg">${u.subeIds.map(id=>`<button class="${id===UI.ms?'on':''}" data-act="mSube" data-v="${id}">${esc(B(id).ad)}</button>`).join('')}</div>`:''}
   <div class="days">${[1,2,3,4,5,6].map(g=>{const h=(m[g]||[]).filter(x=>saatler.includes(x));const diger=u.subeIds.filter(id=>id!==UI.ms&&((u.musait[id]||{})[g]||[]).length).map(id=>B(id).ad);
    return`<div class="dayrow"><div class="dayrow-h"><b>${GUNLER[g]}</b><span class="small muted">${h.length?`${h.length} saat · ${h[0]}–${pad(parseInt(h[h.length-1])+1)}:00`:'Çalışmıyor'}${diger.length?' · '+diger.join(', ')+' şubesinde de':''}</span><span style="display:flex;gap:6px"><button class="btn sm" data-act="mGun" data-g="${g}" data-v="tum">Tüm gün</button><button class="btn sm ghost" data-act="mGun" data-g="${g}" data-v="yok">Kapat</button></span></div>
@@ -1493,10 +1604,14 @@ function ySubeSec(){UI.ySube=S.subeler.some(b=>b.id===UI.ySube)?UI.ySube:S.subel
 const VIEWS={gorusmeler:vGorusmeler,takvim:vTakvim,randevu:()=>vRandevu('asistan'),danisanlar:vDanisanlar,kasa:vKasa,giderler:vGiderler,sms:vSms,firma:vFirma,
   ozet:vOzet,aktar:vAktar,ykasa:()=>ySubeSec()+vKasa(),ygider:()=>ySubeSec()+vGiderler(),subeler:vSubeler,uzmanlar:vUzmanlar,fiyat:vFiyat,firmalar:vFirmalar,smsayar:vSmsAyar,
   ajanda:vAjanda,danisanlarim:vDanisanlarim,kendi:()=>vRandevu('psikolog'),hakedis:vHakedis,musaitlik:vMusaitlik};
-const AFTER={randevu:rInit,kendi:rInit};
+const AFTER={randevu:rInit,kendi:rInit,smsayar:()=>{if(!SUNUCU)return;API.cagir('sms-durum').then(o=>{const e=$('#smsMod');if(!e)return;e.hidden=false;
+  if(o.mod==='canli'){e.className='cmsg err';e.innerHTML='<span><b>Canlı mod:</b> mesajlar danışanlara gerçekten gönderilir.</span>'}
+  else{e.className='cmsg ok';e.innerHTML=`<span><b>Test modu:</b> mesajlar ${o.izinli.length?'yalnızca şu numaralara gerçekten gider: '+o.izinli.map(esc).join(', ')+'. Diğerleri gönderilmeden kaydedilir.':'hiçbir numaraya gönderilmez, yalnızca kaydedilir.'}</span>`}}).catch(()=>{})}};
 
 /* ============ Aksiyonlar ============ */
 const A={
+  linkKaydet(){const v=val('ms_link').trim();if(v&&!/^https:\/\/\S+$/i.test(v)){toast('Link https:// ile başlamalı.',1);return}U(UI.uzmanId).onlineLink=v;commit();toast(v?'Online görüşme linkiniz kaydedildi.':'Online görüşme linki kaldırıldı.')},
+  demoYukle(d,el){demoYukle(el)},
   kapat,
   aktarSec(d,el){const f=el.files&&el.files[0];if(!f)return;UI.aktarim={ad:f.name,boyut:f.size};$('#aktarDurum').textContent='Okunuyor…';
     const r=new FileReader();r.onload=()=>{try{const x=aktarimHazirla(String(r.result));UI.aktarim={ad:f.name,boyut:f.size,...x}}catch(e){UI.aktarim={ad:f.name,boyut:f.size,hata:e.message}}render()};
@@ -1552,7 +1667,8 @@ const A={
     box.innerHTML=`<div class="oneri" style="flex-direction:column;align-items:stretch;gap:6px"><span>${ic('users')} Bu numara ${l.length} kayıtta kullanılıyor. Aynı kişiyse kaydı seçin; aynı aileden farklı biriyse (ör. kardeş) yeni kayıt olarak devam edin.</span>
     ${l.slice(0,5).map(x=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span><b>${esc(x.d.ad)}</b> <span class="small muted">${x.d.tur?x.d.tur+' · ':''}numara ${x.rol} olarak kayıtlı · ${toplamSeans(x.d)} seans</span></span><button type="button" class="btn sm" data-act="acSec" data-id="${x.d.id}">Bu kişi</button></div>`).join('')}</div>`},
   uzPasif(d){const u=U(d.id);
-    if(!u.aktif){u.aktif=true;kapat();commit();toast(`${u.ad} yeniden aktif.`);return}
+    const hesapDurum=a=>{if(SUNUCU&&u.email)API.cagir('hesap',{rol:'psikolog',kod:u.id,aktif:a}).catch(e=>toast(e.message,1))};
+    if(!u.aktif){u.aktif=true;hesapDurum(true);kapat();commit();toast(`${u.ad} yeniden aktif.`);return}
     const ak=S.seanslar.filter(s=>s.uzmanId===u.id&&s.durum==='bekliyor'&&!gecti(s)).sort((a,b)=>(a.tarih+a.saat).localeCompare(b.tarih+b.saat));
     const od=S.seanslar.filter(s=>s.uzmanId===u.id&&s.durum==='bekliyor'&&gecti(s)).length;
     if(ak.length){A._pasifUz=u.id;
@@ -1560,7 +1676,7 @@ const A={
       <div class="hist">${ak.map(s=>`<div><b class="small">${fmtD(s.tarih,{day:'numeric',month:'short'})} ${s.saat}</b><span class="small">${esc(D(s.danisanId).ad)} · ${esc(B(s.subeId).ad)}${s.tur?' · '+s.tur:''}</span><span style="display:flex;gap:4px"><button class="btn sm" data-act="seansDuz" data-id="${s.id}">Uzman değiştir</button><button class="btn sm ghost" data-act="iptalSor" data-id="${s.id}">İptal</button></span></div>`).join('')}</div>
       ${od?`<div class="small" style="color:var(--warn)">Ayrıca tahsilatı girilmemiş ${od} geçmiş seansı var; pasife almadan önce kapatılması önerilir.</div>`:''}`,
       `<button class="btn" data-act="uzDuz" data-id="${u.id}">Uzman kartına dön</button>`);return}
-    u.aktif=false;kapat();commit();toast(`${u.ad} pasife alındı. Geçmiş seans ve muhasebe kayıtları korunuyor.${od?` ${od} seansın tahsilatı hâlâ bekliyor.`:''}`)},
+    u.aktif=false;hesapDurum(false);kapat();commit();toast(`${u.ad} pasife alındı. Geçmiş seans ve muhasebe kayıtları korunuyor.${od?` ${od} seansın tahsilatı hâlâ bekliyor.`:''}`)},
 
   seansDuz(d){seansDuz(d.id)},
   sdCalc(){const s=SE(A._sid);const m=$('#sd_msg');
@@ -1600,15 +1716,17 @@ const A={
 
   rolSec(d){UI.rol=d.rol;UI.gozlem=false;if(d.sube)UI.subeId=d.sube;if(d.rol==='psikolog'){const s=$('#loginUz');if(s)UI.uzmanId=s.value}UI.view=null;UI.per={tip:'gun',ref:TODAY};UI._ozetSet=0;UI._hkSet=0;kapat();render();scrollTo(0,0)},
   hesap(){const h=aktifHesap();
-    sheet('Hesabım',`<div class="secili"><div class="grow"><b>${esc(h.ad)}</b><span class="small muted">${h.rol} · ${esc(h.kul)}</span></div></div>
+    sheet('Hesabım',`<div class="secili"><div class="grow"><b>${esc(h.ad)}</b><span class="small muted">${h.rol} · ${esc(SUNUCU&&UI.hesap&&!UI.gozlem?UI.hesap.email:h.kul)}</span></div></div>
     ${UI.gozlem?'<span class="small muted">Şu an gözlem modundasınız. Yönetime dönmek için üstteki bandı kullanın.</span>':''}
     <button class="btn block" data-act="sifreDegis">${ic('shield')}Şifremi değiştir</button>
     <button class="btn danger block" data-act="cikis">Çıkış yap</button>`)},
   sifreDegis(){sheet('Şifremi değiştir',`${fld('Mevcut şifre','<div class="pw"><input id="sd_m" type="password" autocomplete="current-password"></div>')}
-    ${fld('Yeni şifre','<div class="pw"><input id="sd_y" type="password" autocomplete="new-password" placeholder="En az 6 karakter"></div>')}
+    ${fld('Yeni şifre','<div class="pw"><input id="sd_y" type="password" autocomplete="new-password" placeholder="'+(SUNUCU?'En az 10 karakter, harf ve rakam':'En az 6 karakter')+'"></div>')}
     ${fld('Yeni şifre (tekrar)','<div class="pw"><input id="sd_t" type="password" autocomplete="new-password"></div>')}`,
     `<button class="btn" data-act="hesap">Geri</button><button class="btn primary" data-act="sifreKaydet">Şifreyi kaydet</button>`)},
-  sifreKaydet(){const h=aktifHesap();if(val('sd_m')!==h.obj.sifre){toast('Mevcut şifre hatalı.',1);return}const y=val('sd_y');
+  sifreKaydet(){if(SUNUCU){const y=val('sd_y');if(y!==val('sd_t')){toast('Yeni şifreler birbiriyle aynı değil.',1);return}
+      API.cagir('sifre',{eski:$('#sd_m').value,yeni:y}).then(()=>{kapat();toast('Şifreniz güncellendi. Diğer cihazlardaki oturumlar kapatıldı.')}).catch(x=>toast(x.message,1));return}
+    const h=aktifHesap();if(val('sd_m')!==h.obj.sifre){toast('Mevcut şifre hatalı.',1);return}const y=val('sd_y');
     if(y.length<6){toast('Yeni şifre en az 6 karakter olmalı.',1);return}if(y!==val('sd_t')){toast('Yeni şifreler birbiriyle aynı değil.',1);return}
     h.obj.sifre=y;kapat();commit();toast('Şifreniz güncellendi.')},
   sifreGoster(d,el){const i=$('#g_s');const g=i.type==='password';i.type=g?'text':'password';el.setAttribute('aria-label',g?'Şifreyi gizle':'Şifreyi göster');el.style.color=g?'var(--accent)':''},
@@ -1620,12 +1738,19 @@ const A={
     const k=val('g_k'),sf=$('#g_s').value;
     if(!k||!sf){goster('E-posta ve şifre gerekli.');(!k?$('#g_k'):$('#g_s')).focus();return}
     if(!EPOSTA_RE.test(k)){goster('Geçerli bir e-posta adresi girin.');$('#g_k').focus();return}
-    const rol=(document.querySelector('input[name="g_rol"]:checked')||{}).value||'asistan';UI.girisRol=rol;const h=hesapBul(rol,k);
+    const rol=(document.querySelector('input[name="g_rol"]:checked')||{}).value||'asistan';UI.girisRol=rol;
+    if(SUNUCU){const b=$('#g_btn');b.disabled=true;b.textContent='Giriş yapılıyor…';
+      API.cagir('giris',{rol,email:k,sifre:sf}).then(async o=>{b.textContent='Veriler yükleniyor…';
+        try{await girisSonrasi(o.kullanici)}catch(x){API.cagir('cikis',{}).catch(()=>{});SENK.durdur();throw x}
+        UI.view=null;UI.per={tip:'gun',ref:TODAY};UI._ozetSet=0;UI._hkSet=0;saveUI();render();scrollTo(0,0);toast(`Hoş geldiniz, ${o.kullanici.ad||ROL_AD[o.kullanici.rol]} · ${ROL_AD[o.kullanici.rol]} paneli.`)})
+      .catch(x=>{goster(esc(x.message));const i=$('#g_s');if(i)i.select()})
+      .finally(()=>{const b2=$('#g_btn');if(b2){b2.disabled=false;b2.textContent='Giriş yap'}});return}
+    const h=hesapBul(rol,k);
     if(!h||h.obj.sifre!==sf){A._hata=(A._hata||0)+1;if(A._hata>=5){A._kilit=now+30000;A._hata=0}goster('E-posta veya şifre hatalı.');$('#g_s').select();return}
     if(h.pasif){A._hata=(A._hata||0)+1;goster('E-posta veya şifre hatalı.');return}
     A._hata=0;UI.hatirla=chk('g_hatirla');UI.rol=h.rol;UI.gozlem=false;if(h.subeId)UI.subeId=h.subeId;if(h.uzmanId)UI.uzmanId=h.uzmanId;
     UI.view=null;UI.per={tip:'gun',ref:TODAY};UI._ozetSet=0;UI._hkSet=0;render();scrollTo(0,0);toast(`Hoş geldiniz, ${h.ad} · ${ROL_AD[h.rol]} paneli.`)},
-  cikis(){UI.rol=null;UI.gozlem=false;kapat();saveUI();try{location.hash=''}catch(e){}render();toast('Çıkış yapıldı.')},
+  cikis(){if(SUNUCU){API.cagir('cikis',{}).catch(()=>{});UI.hesap=null;SENK.durdur()}UI.rol=null;UI.gozlem=false;kapat();saveUI();try{location.hash=''}catch(e){}render();toast('Çıkış yapıldı.')},
   go(d){A._pasifUz=null;UI.view=d.v;kapat();render();scrollTo(0,0)},
   more(){const items=NAV[aktifRol()].slice(4);sheet('Diğer',items.map(i=>`<button class="btn block" style="justify-content:flex-start" data-act="go" data-v="${i[0]}">${ic(i[2])}${i[1]}</button>`).join(''))},
   perTip(d){UI.per.tip=d.v;if(d.v==='ozel'){const[b,e]=perRange();UI.per.bas=UI.per.bas||addDays(TODAY,-30);UI.per.bit=UI.per.bit||TODAY}render()},
@@ -1655,7 +1780,7 @@ const A={
     let n=0;if(chk('e_sms'))n=smsDanisanVeUzman('degisiklik',s,true);kapat();commit();toast(`Seans ${fmtD(s.tarih)} ${s.saat} saatine taşındı${n?` · ${n} SMS`:''}.`)},
   iptalSor(d){const s=SE(d.id);sheet('Seansı iptal et',`<p style="margin:0">${esc(D(s.danisanId).ad)} · ${fmtD(s.tarih)} ${s.saat} seansı iptal edilecek. İptaller seans sayacına ve kasaya dahil edilmez.</p><label class="chk"><input type="checkbox" id="i_sms" checked> Danışana iptal SMS’i gönder</label>`,
     `<button class="btn" data-act="kapat">Vazgeç</button><button class="btn danger sure" data-act="iptalEt" data-id="${d.id}">İptal et</button>`)},
-  iptalEt(d){const s=SE(d.id);iz(s,'İptal edildi'+(s.odeme?` (tahsilat ${TL(s.odeme.tahsilat)} silindi)`:''));s.durum='iptal';s.odeme=null;let n=0;if(chk('i_sms'))n=smsDanisanVeUzman('iptal',s,false);kapat();commit();toast(`Seans iptal edildi${n?` · ${n} SMS`:''}.`);pasifDon()},
+  iptalEt(d){const s=SE(d.id);iz(s,'İptal edildi'+(s.odeme?` (tahsilat ${TL(s.odeme.tahsilat)} silindi)`:''));s.durum='iptal';s.odeme=null;let n=0;if(chk('i_sms'))n=smsDanisanVeUzman('iptal',s,true);kapat();commit();toast(`Seans iptal edildi${n?` · ${n} SMS`:''}.`);pasifDon()},
   geriAl(d){const s=SE(d.id);const e=cakisma({...s,uzmanId:s.uzmanId,haricId:s.id});if(e.length){toast('Bu saat artık dolu; seansı yeniden planlayın.',1);return}s.durum='bekliyor';commit();toast('İptal geri alındı.')},
   seansDetay(d){seansDetay(d.id)},
   bosHucre(d){UI.prefill={tarih:d.t,saat:d.h,odaId:d.o};UI.view='randevu';render();scrollTo(0,0)},
@@ -1725,7 +1850,7 @@ const A={
   smsTum(d,el){const t=UI.smsT||addDays(TODAY,1);const list=S.seanslar.filter(s=>s.subeId===UI.subeId&&s.tarih===t&&s.durum==='bekliyor');UI.smsSel.ids=new Set(el.checked?list.map(s=>s.id):[]);render()},
   smsSec(d,el){el.checked?UI.smsSel.ids.add(d.id):UI.smsSel.ids.delete(d.id);render()},
   smsGonder(){const t=UI.smsT||addDays(TODAY,1);const list=S.seanslar.filter(s=>UI.smsSel.ids.has(s.id)&&s.tarih===t);const uzDa=chk('smsUz');let n=0;
-    list.forEach(s=>{n+=smsAt('hatirlatma',s,alicilar(D(s.danisanId)));const u=U(s.uzmanId);if(uzDa&&u.sms)n+=smsAt('uzman',s,[{ad:u.ad,tel:u.tel}])});commit();toast(`${n} SMS ${S.netgsm.kod?'NetGSM kuyruğuna alındı':'kaydedildi (simülasyon)'}.`)},
+    list.forEach(s=>{n+=smsAt('d_hatirlatma',s,alicilar(D(s.danisanId)));const u=U(s.uzmanId);if(uzDa&&u.sms&&u.tel)n+=smsAt('p_hatirlatma',s,[{ad:u.ad,tel:u.tel}])});commit();toast(`${n} SMS ${S.netgsm.kod?'NetGSM kuyruğuna alındı':'kaydedildi (simülasyon)'}.`)},
   firmaSec(d,el){UI.fsec=el.value;render()},
   csv(){const blob=new Blob(['﻿'+csvMetni()],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${F(UI.fsec).ad.replace(/\W+/g,'_')}_${perRange()[0]}.csv`;document.body.appendChild(a);a.click();a.remove();toast('CSV hazırlandı. İndirme başlamazsa “Kopyala” ile Excel’e yapıştırın.')},
   csvKopya(){const t=csvMetni().replace(/;/g,'\t').replace(/"/g,'');navigator.clipboard.writeText(t).then(()=>toast('Tablo kopyalandı · Excel’e yapıştırabilirsiniz.'),()=>toast('Kopyalanamadı; tarayıcı izin vermedi.',1))},
@@ -1737,15 +1862,17 @@ const A={
     <div class="row2">${fld('Telefon',`<input id="sb_tel" type="tel" data-tel="sabit" inputmode="numeric" placeholder="2163901234" autocomplete="off" value="${esc(s.tel||'')}">`)}${fld('Harita bağlantısı',`<input id="sb_harita" value="${esc(s.harita)}" placeholder="https://maps.google.com/...">`)}</div>
     <div class="row2">${fld('Açılış',`<select id="sb_ac">${hsA.map(h=>`<option ${h===s.acilis?'selected':''}>${h}</option>`).join('')}</select>`)}${fld('Kapanış',`<select id="sb_kp">${hsK.map(h=>`<option ${h===s.kapanis?'selected':''}>${h}</option>`).join('')}</select>`)}</div>
     <span class="small muted">Asistanın ve psikoloğun randevu ekranları, oda takvimi ve uzman müsaitlik ekranı bu aralığı kullanır. Kapanış, son seansın bittiği saattir (ör. 22:00 → son seans 21:00).</span>
-    <div class="sub-box"><span class="lbl">Asistan girişi</span><div class="row2">${fld('E-posta',`<input id="sb_ak" type="email" inputmode="email" autocapitalize="none" spellcheck="false" value="${esc(s.asistan?s.asistan.email:'')}">`)}${fld('Şifre',`<input id="sb_as" type="text" autocomplete="off" value="${esc(s.asistan?s.asistan.sifre:'')}" placeholder="En az 6 karakter">`)}</div><span class="small muted">Şubenin asistanı bu e-posta ve şifreyle giriş yapar.</span></div>`,
+    <div class="sub-box"><span class="lbl">Asistan girişi</span><div class="row2">${fld('E-posta',`<input id="sb_ak" type="email" inputmode="email" autocapitalize="none" spellcheck="false" value="${esc(s.asistan?s.asistan.email:'')}">`)}${fld('Şifre',`<input id="sb_as" type="text" autocomplete="off" value="${SUNUCU?'':esc(s.asistan?s.asistan.sifre:'')}" placeholder="${SUNUCU?(d.id?'Değiştirmek için yeni şifre':'En az 10 karakter'):'En az 6 karakter'}">`)}</div><span class="small muted">Şubenin asistanı bu e-posta ve şifreyle giriş yapar.</span></div>`,
     `<button class="btn" data-act="kapat">Vazgeç</button><button class="btn primary" data-act="subeKaydet" data-id="${d.id}">Kaydet</button>`)},
   subeKaydet(d){const ad=val('sb_ad');if(!ad){toast('Şube adı gerekli.',1);return}{const h=telHata([['sb_tel','Şube telefonu',false]]);if(h){toast(h,1);return}}const x={ad,adres:val('sb_adres'),tel:val('sb_tel'),harita:val('sb_harita'),acilis:val('sb_ac'),kapanis:val('sb_kp')};
     if(x.acilis>=x.kapanis){toast('Kapanış saati açılıştan sonra olmalı.',1);return}
     const ak=val('sb_ak'),as=val('sb_as');if(!EPOSTA_RE.test(ak)){toast('Asistan için geçerli bir e-posta girin.',1);$('#sb_ak').focus();return}
-    if(as.length<6){toast('Asistan şifresi en az 6 karakter olmalı.',1);return}
+    if(!SUNUCU&&as.length<6){toast('Asistan şifresi en az 6 karakter olmalı.',1);return}
     {const eski=d.id?B(d.id).asistan:null;const c=kullaniciCakisma(ak,eski,'asistan');if(c){toast(`Bu e-posta ${c} kullanılıyor.`,1);return}}
-    x.asistan={email:ak,sifre:as};
-    if(d.id)Object.assign(B(d.id),x);else S.subeler.push({id:uid('b'),...x});kapat();commit();toast('Şube kaydedildi.')},
+    const id=d.id||uid('b');x.asistan=SUNUCU?{email:ak}:{email:ak,sifre:as};
+    const uygula=()=>{if(d.id)Object.assign(B(d.id),x);else S.subeler.push({id,...x});kapat();commit();toast('Şube kaydedildi.')};
+    if(!SUNUCU)return uygula();
+    API.cagir('hesap',{rol:'asistan',kod:id,email:ak,sifre:as,ad:ad+' Şubesi'}).then(uygula).catch(e=>toast(e.message,1))},
   odaDuz(d){const o=d.id?O(d.id):{ad:'',tur:'Yetişkin Odası'};
     sheet(d.id?'Odayı düzenle':'Yeni oda · '+esc(B(d.s).ad),`${fld('Oda adı',`<input id="o_ad" value="${esc(o.ad)}">`)}${fld('Oda türü',`<select id="o_tur">${ODA_TURLERI.map(t=>`<option ${t===o.tur?'selected':''}>${t}</option>`).join('')}</select>`)}`,
     `${d.id?`<button class="btn danger" data-act="odaSil" data-id="${d.id}">Sil</button>`:''}<button class="btn" data-act="kapat">Vazgeç</button><button class="btn primary" data-act="odaKaydet" data-id="${d.id}" data-s="${d.s}">Kaydet</button>`)},
@@ -1761,11 +1888,15 @@ const A={
     {const h=telHata([['u_tel','Uzman telefonu',true]]);if(h){toast(h,1);return}}
     {const em=val('u_email');if(em||val('u_sifre')){if(!EPOSTA_RE.test(em)){toast('Giriş için geçerli bir e-posta girin.',1);return}
      const c=kullaniciCakisma(em,d.id?U(d.id):null,'psikolog');if(c){toast(`Bu e-posta ${c} kullanılıyor.`,1);return}
-     if(val('u_sifre').length<6){toast('Giriş şifresi en az 6 karakter olmalı.',1);return}}}
-    const x={ad,tel:val('u_tel'),email:val('u_email'),sifre:val('u_sifre'),alanlar,subeIds,oranKendi:Math.min(100,Math.max(0,+val('u_ok'))),oranYonlendirme:Math.min(100,Math.max(0,+val('u_oy'))),telGor:chk('u_telgor'),sms:chk('u_sms')};
-    if(d.id){const u=U(d.id);Object.assign(u,x);subeIds.forEach(s=>u.musait[s]=u.musait[s]||{})}
-    else{const musait={};subeIds.forEach(s=>{musait[s]={};for(let g=1;g<=6;g++)musait[s][g]=subeIds.length===1||((g%2?subeIds[0]:subeIds[1])===s)?SAATLER.filter(h=>h>='10:00'&&h<'21:00'):[]});S.uzmanlar.push({id:uid('u'),aktif:true,musait,izinler:[],...x})}
-    kapat();commit();toast('Uzman kaydedildi.')},
+     if(!SUNUCU&&val('u_sifre').length<6){toast('Giriş şifresi en az 6 karakter olmalı.',1);return}}}
+    const x={ad,tel:val('u_tel'),email:val('u_email'),...(SUNUCU?{}:{sifre:val('u_sifre')}),alanlar,subeIds,oranKendi:Math.min(100,Math.max(0,+val('u_ok'))),oranYonlendirme:Math.min(100,Math.max(0,+val('u_oy'))),telGor:chk('u_telgor'),sms:chk('u_sms'),onlineLink:val('u_link')};
+    if(x.onlineLink&&!/^https:\/\/\S+$/i.test(x.onlineLink)){toast('Online görüşme linki https:// ile başlamalı.',1);return}
+    const id=d.id||uid('u');
+    const uygula=()=>{if(d.id){const u=U(d.id);Object.assign(u,x);subeIds.forEach(s=>u.musait[s]=u.musait[s]||{})}
+    else{const musait={};subeIds.forEach(s=>{musait[s]={};for(let g=1;g<=6;g++)musait[s][g]=subeIds.length===1||((g%2?subeIds[0]:subeIds[1])===s)?SAATLER.filter(h=>h>='10:00'&&h<'21:00'):[]});S.uzmanlar.push({id,aktif:true,musait,izinler:[],...x})}
+    kapat();commit();toast('Uzman kaydedildi.')};
+    if(!SUNUCU||(!x.email&&!val('u_sifre')))return uygula();
+    API.cagir('hesap',{rol:'psikolog',kod:id,email:x.email,sifre:val('u_sifre'),ad}).then(uygula).catch(e=>toast(e.message,1))},
   fiyatKaydet(){TURLER.forEach(t=>{const v=+val('fy_'+TK[t]);if(v>=0)S.fiyat[t]=v});{const k=+val('fy_kdv');if(!(k>=0&&k<=100)){toast('KDV oranı 0 ile 100 arasında olmalı.',1);return}S.ayar.kdv=k;S.ayar.kdvDahil=true}commit();toast('Fiyat politikası kaydedildi.')},
   firmaDuz(d){firmaDuz(d.id)},
   fKisit(){$('#f_uzlar').hidden=document.querySelector('input[name="f_kisit"]:checked').value==='tum'},
@@ -1773,9 +1904,18 @@ const A={
     const x={ad,vergi:val('f_vergi'),yetkili:val('f_yet'),adres:val('f_adres'),subeIds:$$('input[name="f_sube"]:checked').map(i=>i.value),uzmanKisit:document.querySelector('input[name="f_kisit"]:checked').value,uzmanIds:$$('input[name="f_uz"]:checked').map(i=>i.value)};
     if(!x.subeIds.length){toast('En az bir şube seçin.',1);return}
     if(d.id)Object.assign(F(d.id),x);else S.firmalar.push({id:uid('f'),...x});kapat();commit();toast('Firma kaydedildi.')},
-  sbSay(d,el){const k=el.id.slice(3);$('#sbc_'+k).textContent=el.value.length+' karakter'+(el.value.length>155?' · 2 SMS':'')},
-  smsAyarKaydet(){S.netgsm={kod:val('n_kod'),sifre:val('n_sifre'),baslik:val('n_baslik')||'ASISTPSIKO'};['yeni','iptal','degisiklik','hatirlatma','uzman'].forEach(k=>S.sablon[k]=$('#sb_'+k).value);commit();toast('SMS ayarları kaydedildi.')},
-  netgsmTest(){toast(val('n_kod')&&val('n_sifre')?'Bilgiler tamam. Canlı test sunucu kurulumundan sonra yapılabilir.':'Kullanıcı kodu ve şifre girin.',!(val('n_kod')&&val('n_sifre')))},
+  sbSay(d,el){const k=el.id.slice(3);$('#sbc_'+k).textContent=smsKarakter(el.value)},
+  smsSube(d){sablonFormuAl();UI.smsSube=d.id;render()},
+  smsSablonHepsine(d,el){if(!el.classList.contains('sure')){el.classList.add('sure');el.textContent='Diğer şubelerin şablonlarının üzerine yazılacak · onaylayın';return}
+    sablonFormuAl();const kaynak=S.sablon.sube[UI.smsSube];S.subeler.forEach(b=>{if(b.id!==UI.smsSube)S.sablon.sube[b.id]={...kaynak}});commit();toast('Şablonlar tüm şubelere uygulandı.')},
+  smsAyarKaydet(){if(SUNUCU){const sablon=sablonFormuAl;
+      const kod=val('n_kod'),sf=$('#n_sifre').value,bas=val('n_baslik')||'ASISTPSIKO';
+      const degisti=kod!==(S.netgsm.kod||'')||sf||bas!==(S.netgsm.baslik||'');
+      if(!degisti){sablon();commit();toast('SMS ayarları kaydedildi.');return}
+      API.cagir('sms-ayar',{kod,sifre:sf,baslik:bas}).then(o=>{S.netgsm={kod:o.kod||'',baslik:o.baslik||bas,bagli:!!o.bagli};sablon();commit();toast(o.bagli?'NetGSM bilgileri sunucuya kaydedildi.':'NetGSM bağlantısı kaldırıldı.')}).catch(e=>toast(e.message,1));return}
+    S.netgsm={kod:val('n_kod'),sifre:val('n_sifre'),baslik:val('n_baslik')||'ASISTPSIKO'};sablonFormuAl();commit();toast('SMS ayarları kaydedildi.')},
+  netgsmTest(d,el){if(SUNUCU){el.disabled=true;API.cagir('sms-test',{}).then(o=>toast(o.baslikVar?`Bağlantı başarılı. "${S.netgsm.baslik}" başlığı hesabınızda tanımlı.`:`Bağlantı başarılı ama "${S.netgsm.baslik}" başlığı hesapta yok. Tanımlı başlıklar: ${o.basliklar.join(', ')||'yok'}`,!o.baslikVar)).catch(e=>toast(e.message,1)).finally(()=>{el.disabled=false});return}
+    toast(val('n_kod')&&val('n_sifre')?'Bilgiler tamam. Canlı test sunucu kurulumundan sonra yapılabilir.':'Kullanıcı kodu ve şifre girin.',!(val('n_kod')&&val('n_sifre')))},
   sifirla(d,el){if(!el.classList.contains('sure')){el.classList.add('sure');el.textContent='Tüm veriler silinecek · onaylayın';return}S=seed();idx();save();UI.rol=null;render();toast('Demo verisi yeniden yüklendi.')},
   ajTip(d){UI.aj=d.v;render()},ajShift(d){UI.ajT=addDays(UI.ajT||TODAY,(UI.aj==='hafta'?7:1)*+d.v);render()},ajToday(){UI.ajT=TODAY;render()},
   hkShift(d){const ay=UI.hkAy||TODAY.slice(0,7);const x=new Date(+ay.slice(0,4),+ay.slice(5,7)-1+(+d.v),1);UI.hkAy=ds(x).slice(0,7);render()},
@@ -1800,8 +1940,10 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('#modal').innerHT
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&ds(new Date())!==TODAY){TODAY=ds(new Date());UI.per.ref=TODAY;render()}});
 setInterval(()=>{if(ds(new Date())!==TODAY){TODAY=ds(new Date());render()}},60000);
 let _ilk=false;const ilkCiz=()=>{if(_ilk)return;_ilk=true;_hazir=true;render()};
-IDB.get(KEY).then(x=>{if(x&&x.v){S=x;migrate();idx()}ilkCiz();save()}).catch(()=>{ilkCiz();save()});
-setTimeout(ilkCiz,2500);
+const sunucuOturum=SUNUCU?API.cagir('oturum').then(async o=>{if(o.giris){try{await girisSonrasi(o.kullanici)}catch(e){oturumUygula(null);setTimeout(()=>toast(e.message,1),400)}}else oturumUygula(null);if(o.zamanAsimi)setTimeout(()=>toast('Oturumunuzun süresi doldu. Lütfen yeniden giriş yapın.',1),400)}).catch(e=>{oturumUygula(null);setTimeout(()=>toast(e.message,1),400)}):Promise.resolve();
+if(SUNUCU){try{localStorage.removeItem(KEY)}catch(e){}IDB.set(KEY,null).catch(()=>{})}
+Promise.all([SUNUCU?Promise.resolve():IDB.get(KEY).then(x=>{if(x&&x.v){S=x;migrate();sifreleriTemizle();idx()}}).catch(()=>{}),sunucuOturum]).finally(()=>{if(_ilk)render();ilkCiz();save()});
+setTimeout(ilkCiz,SUNUCU?6000:2500);
 </script>
 
 </body>
