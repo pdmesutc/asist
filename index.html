@@ -1225,7 +1225,9 @@ function vDanisanlar(){UI.dk=UI.dk||'sube';
 function dFiltre(list,q){if(!q)return list;const ql=low(q),qd=digits(q);
   return list.filter(d=>low(d.ad).includes(ql)||(qd.length>=3&&(digits(d.tel).includes(qd)||(d.anne&&digits(d.anne.tel).includes(qd))||(d.baba&&digits(d.baba.tel).includes(qd))||(d.es&&digits(d.es.tel).includes(qd))))||(d.anne&&low(d.anne.ad).includes(ql))||(d.baba&&low(d.baba.ad).includes(ql))||(d.es&&low(d.es.ad).includes(ql))||(d.veli&&(low(d.veli.ad).includes(ql)||(qd.length>=3&&digits(d.veli.tel).includes(qd)))))}
 function hl(t,q){if(!q||q.length<2)return esc(t);const i=low(t).indexOf(low(q));if(i<0)return esc(t);return esc(t.slice(0,i))+'<mark>'+esc(t.slice(i,i+q.length))+'</mark>'+esc(t.slice(i+q.length))}
-function dRows(list,q,act,maskTel){return list.map(d=>`<button class="row t-${TK[d.tur]}" data-act="${act}" data-id="${d.id}"><span class="av">${ini(d.ad)}</span><span style="min-width:0"><span class="nm">${hl(d.ad,q)}${d.firmaId?`<span class="badge b-firma">${esc(F(d.firmaId).ad)}</span>`:''}</span><span class="mt">${maskTel?'Telefon gizli':esc(d.tel)} · ${d.tur?d.tur+' · ':''}${esc(B(d.subeId).ad)}</span></span><span class="cnt">${toplamSeans(d)}<small>seans</small></span></button>`).join('')}
+// Psikolog telefon görme izni kapalıyken bile kendi getirdiği danışanların numarasını görür
+const telGorur=(d,u)=>!u||u.telGor||d.sahipUzmanId===u.id||S.seanslar.some(s=>s.danisanId===d.id&&s.uzmanId===u.id&&s.kaynak==='kendi');
+function dRows(list,q,act,maskTel){return list.map(d=>`<button class="row t-${TK[d.tur]}" data-act="${act}" data-id="${d.id}"><span class="av">${ini(d.ad)}</span><span style="min-width:0"><span class="nm">${hl(d.ad,q)}${d.firmaId?`<span class="badge b-firma">${esc(F(d.firmaId).ad)}</span>`:''}</span><span class="mt">${maskTel&&!telGorur(d,maskTel)?'Telefon gizli':esc(d.tel)} · ${d.tur?d.tur+' · ':''}${esc(B(d.subeId).ad)}</span></span><span class="cnt">${toplamSeans(d)}<small>seans</small></span></button>`).join('')}
 function dListHTML(){const q=UI.dq||'';let list=sorted();if(UI.dk!=='tum')list=list.filter(d=>d.subeId===UI.subeId);list=dFiltre(list,q);
   const per=50,pages=Math.max(1,Math.ceil(list.length/per));UI.dp=Math.min(UI.dp||0,pages-1);const st=UI.dp*per;
   if(!list.length)return`<div class="empty"><b>Sonuç bulunamadı</b>“${esc(q)}” ile eşleşen danışan yok. Yeni randevu formundan kayıt oluşturabilirsiniz.</div>`;
@@ -1436,7 +1438,7 @@ function vDanisanlarim(){const all=benimDanisanlar();
   return`<div class="page-head"><div><h1>Danışanlar</h1><p>Yalnızca sizinle görüşmesi olan ${all.length} danışan görüntülenir.</p></div></div>
   <div class="search">${ic('search')}<input id="pq" placeholder="Danışan ara" value="${esc(UI.pq||'')}" data-in="pAra" aria-label="Danışan ara"></div><div id="pList">${pListHTML()}</div>`}
 function pListHTML(){const q=UI.pq||'';const u=U(UI.uzmanId);const list=dFiltre(benimDanisanlar(),q).slice(0,100);
-  return list.length?`<div class="dl">${dRows(list,q,'pDanisan',!u.telGor)}</div>`:'<div class="empty"><b>Danışan bulunamadı</b></div>'}
+  return list.length?`<div class="dl">${dRows(list,q,'pDanisan',u.telGor?null:u)}</div>`:'<div class="empty"><b>Danışan bulunamadı</b></div>'}
 function vHakedis(){const u=U(UI.uzmanId);if(!UI._hkSet){UI.per={tip:'ay',ref:TODAY};UI._hkSet=1}const[b,e]=perRange();
   const k=kasa(null,b,e,u.id);
   const odendiMi=s=>S.uzmanOdemeleri.some(o=>o.uzmanId===u.id&&o.subeId===s.subeId&&o.ay===s.tarih.slice(0,7));
