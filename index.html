@@ -250,6 +250,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.88rem}
 .dl .cnt{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
 .dl .cnt small{display:block;font-weight:500;color:var(--muted);font-size:.72rem}
 .pager{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:.85rem;color:var(--muted)}
+.kv.onay{margin:4px 0 0}.kv.onay dd{font-size:.95rem}
 .btn.block{white-space:normal;text-align:center;line-height:1.25;padding-block:8px}
 .psayfa{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;min-width:300px}
 .psayfa>button:first-child{justify-self:start}.psayfa>button:last-child{justify-self:end}
@@ -902,6 +903,13 @@ function smsAt(tip,s,list){const sab=sablonAl(s.subeId,tip);if(!list.length||!sm
    Psikolog işlemi kendisi yaptıysa kendisine bilgilendirme gitmez. */
 const smsAcik=s=>!!(U(s.uzmanId)||{}).sms;
 function smsDanisanVeUzman(tip,s,uzmanaDa){if(!smsAcik(s))return 0;const t=tip==='yeni'&&onlineMi(s)?'online':tip;let n=smsAt('d_'+t,s,alicilar(D(s.danisanId)));const u=U(s.uzmanId);if(uzmanaDa&&UI.rol!=='psikolog'&&u.tel)n+=smsAt('p_'+t,s,[{ad:u.ad,tel:u.tel}]);return n}
+/* Onay ekranı yardımcıları */
+const ozet=r=>`<dl class="kv onay">${r.filter(Boolean).map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+const tamTarih=t=>fmtD(t,{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+function smsOzet(uzmanId,danisanIstiyor,alici){const u=U(uzmanId)||{};
+  if(!u.sms)return'<span class="muted">Gönderilmeyecek · uzman için SMS hizmeti kapalı</span>';
+  const p=[];p.push(danisanIstiyor?(alici?`Danışana gidecek${alici>1?` (${alici} kişi)`:''}`:'<span class="muted">Danışanın SMS için telefonu yok</span>'):'<span class="muted">Danışana gitmeyecek</span>');
+  if(UI.rol!=='psikolog'&&u.tel)p.push('uzmana bilgi gidecek');return p.join(' · ')}
 const smsNot=(s,n)=>smsAcik(s)?(n?` · ${n} SMS ${S.netgsm.kod||S.netgsm.bagli?'gönderildi':'(simülasyon)'}`:''):' · SMS gönderilmedi (uzman için SMS hizmeti kapalı)'
 
 /* ============ UI çekirdeği ============ */
@@ -1787,17 +1795,26 @@ const A={
     s.ucret=+val('t_brut');s.durum='odendi';s.odeme={...c,kanal:document.querySelector('input[name="t_kanal"]:checked').value,tarih:TODAY};
     iz(s,`Tahsilat ${TL(c.tahsilat)} · ${c.kdvOran?"KDV'li":"KDV'siz"} · ofis %${c.oran}${c.oran!==oran(s)?` (varsayılan %${oran(s)})`:''} · ${s.odeme.kanal}`);kapat();commit();toast(`Tahsilat kapatıldı · ${TL(c.tahsilat)}`)},
   tahsilatGeri(d){const s=SE(d.id);iz(s,`Tahsilat geri alındı (${TL(s.odeme?s.odeme.tahsilat:0)})`);s.durum='bekliyor';s.odeme=null;kapat();commit();toast('Tahsilat geri alındı.')},
-  ertele(d){const s=SE(d.id);if(s.durum!=='bekliyor'){toast(s.durum==='odendi'?'Tahsilatı alınmış seans ertelenemez.':'İptal edilmiş seans ertelenemez.',1);return}const rooms=S.odalar.filter(o=>o.subeId===s.subeId);A._eid=d.id;
+  ertele(d){const s=SE(d.id);if(s.durum!=='bekliyor'){toast(s.durum==='odendi'?'Tahsilatı alınmış seans ertelenemez.':'İptal edilmiş seans ertelenemez.',1);return}const rooms=S.odalar.filter(o=>o.subeId===s.subeId);A._eid=d.id;const ty=d.taslak&&A._eTaslak&&A._eTaslak.id===s.id?A._eTaslak:null;
     sheet('Seansı ertele',`<div class="secili"><div class="grow"><b>${esc(D(s.danisanId).ad)}</b><span class="small muted">Şu an: ${fmtD(s.tarih)} ${s.saat} · ${esc(O(s.odaId).ad)}</span></div></div>
-    <div class="row2">${fld('Yeni tarih',`<input type="date" id="e_t" value="${s.tarih}" data-chg="eKontrol">`)}${fld('Yeni saat',`<select id="e_h" data-chg="eKontrol">${SAATLER.filter(h=>(h>=B(s.subeId).acilis&&h<B(s.subeId).kapanis)||h===s.saat).map(h=>`<option ${h===s.saat?'selected':''}>${h}</option>`).join('')}</select>`)}</div>
-    ${fld('Oda',`<select id="e_o" data-chg="eKontrol">${rooms.map(o=>`<option value="${o.id}" ${o.id===s.odaId?'selected':''}>${esc(o.ad)}</option>`).join('')}</select>`)}
-    <div id="e_msg" class="cmsg"></div><label class="chk"><input type="checkbox" id="e_sms" checked> Danışana değişiklik SMS’i gönder</label>`,
-    `<button class="btn" data-act="kapat">Vazgeç</button><button class="btn primary" data-act="erteleKaydet">Seansı taşı</button>`);A.eKontrol()},
+    <div class="row2">${fld('Yeni tarih',`<input type="date" id="e_t" value="${ty?ty.t:s.tarih}" data-chg="eKontrol">`)}${fld('Yeni saat',`<select id="e_h" data-chg="eKontrol">${SAATLER.filter(h=>(h>=B(s.subeId).acilis&&h<B(s.subeId).kapanis)||h===s.saat).map(h=>`<option ${h===(ty?ty.h:s.saat)?'selected':''}>${h}</option>`).join('')}</select>`)}</div>
+    ${fld('Oda',`<select id="e_o" data-chg="eKontrol">${rooms.map(o=>`<option value="${o.id}" ${o.id===(ty?ty.o:s.odaId)?'selected':''}>${esc(o.ad)}</option>`).join('')}</select>`)}
+    <div id="e_msg" class="cmsg"></div><label class="chk"><input type="checkbox" id="e_sms" ${!ty||ty.sms?'checked':''}> Danışana değişiklik SMS’i gönder</label>`,
+    `<button class="btn" data-act="kapat">Vazgeç</button><button class="btn primary" data-act="erteleKaydet">Devam</button>`);A.eKontrol()},
   eKontrol(){const s=SE(A._eid);const e=cakisma({tarih:val('e_t'),saat:val('e_h'),uzmanId:s.uzmanId,odaId:val('e_o'),subeId:s.subeId,haricId:s.id,danisanId:s.danisanId});
     if(e.some(x=>x.includes('dolu'))){const alt=bosOda(s.subeId,val('e_t'),val('e_h'),s.tur,s.id);if(alt&&alt.id!==val('e_o')){$('#e_o').value=alt.id;return A.eKontrol()}}
     const b=$('#e_msg');b.className='cmsg '+(e.length?'err':'ok');b.innerHTML=e.length?e.map(x=>`<span>• ${esc(x)}</span>`).join(''):'<span>✓ Yeni zaman uygun.</span>';return e},
-  erteleKaydet(){const e=A.eKontrol();if(e.length){toast('Çakışma var, başka bir zaman seçin.',1);return}const s=SE(A._eid);iz(s,`Ertelendi: ${s.tarih} ${s.saat} → ${val('e_t')} ${val('e_h')}`);s.tarih=val('e_t');s.saat=val('e_h');s.odaId=val('e_o');
-    let n=0;if(chk('e_sms'))n=smsDanisanVeUzman('degisiklik',s,true);kapat();commit();toast(`Seans ${fmtD(s.tarih)} ${s.saat} saatine taşındı${chk('e_sms')?smsNot(s,n):''}.`)},
+  erteleKaydet(){const e=A.eKontrol();if(e.length){toast('Çakışma var, başka bir zaman seçin.',1);return}const s=SE(A._eid);
+    const y={t:val('e_t'),h:val('e_h'),o:val('e_o'),sms:chk('e_sms')};
+    if(y.t===s.tarih&&y.h===s.saat&&y.o===s.odaId){toast('Tarih, saat veya oda değişmedi.',1);return}
+    A._eTaslak={id:s.id,...y};const al=alicilar(D(s.danisanId)).length;
+    sheet('Ertelemeyi onaylayın',`<p class="small muted" style="margin:0">${esc(D(s.danisanId).ad)} · ${esc(U(s.uzmanId).ad)}</p>
+      ${ozet([['Şu an',`<s class="muted">${tamTarih(s.tarih)} · ${s.saat} · ${esc(O(s.odaId).ad)}</s>`],['Yeni',`<b>${tamTarih(y.t)} · ${y.h}</b> · ${esc(O(y.o).ad)}`],['SMS',smsOzet(s.uzmanId,y.sms,al)]])}`,
+      `<button class="btn" data-act="ertele" data-id="${s.id}" data-taslak="1">Geri</button><button class="btn primary" data-act="erteleOnay">Onayla ve taşı</button>`)},
+  erteleOnay(){const y=A._eTaslak;const s=y&&SE(y.id);if(!s)return;
+    const e=cakisma({tarih:y.t,saat:y.h,uzmanId:s.uzmanId,odaId:y.o,subeId:s.subeId,haricId:s.id,danisanId:s.danisanId});if(e.length){toast(e[0],1);return}
+    iz(s,`Ertelendi: ${s.tarih} ${s.saat} → ${y.t} ${y.h}`);s.tarih=y.t;s.saat=y.h;s.odaId=y.o;A._eTaslak=null;
+    let n=0;if(y.sms)n=smsDanisanVeUzman('degisiklik',s,true);kapat();commit();toast(`Seans ${fmtD(s.tarih)} ${s.saat} saatine taşındı${y.sms?smsNot(s,n):''}.`)},
   iptalSor(d){const s=SE(d.id);sheet('Seansı iptal et',`<p style="margin:0">${esc(D(s.danisanId).ad)} · ${fmtD(s.tarih)} ${s.saat} seansı iptal edilecek. İptaller seans sayacına ve kasaya dahil edilmez.</p><label class="chk"><input type="checkbox" id="i_sms" checked> Danışana iptal SMS’i gönder</label>`,
     `<button class="btn" data-act="kapat">Vazgeç</button><button class="btn danger sure" data-act="iptalEt" data-id="${d.id}">İptal et</button>`)},
   iptalEt(d){const s=SE(d.id);iz(s,'İptal edildi'+(s.odeme?` (tahsilat ${TL(s.odeme.tahsilat)} silindi)`:''));s.durum='iptal';s.odeme=null;let n=0;if(chk('i_sms'))n=smsDanisanVeUzman('iptal',s,true);kapat();commit();toast(`Seans iptal edildi${n?` · ${n} SMS`:''}.`);pasifDon()},
@@ -1832,6 +1849,7 @@ const A={
   odaSec(d){$('#r_oda').value=d.o;formKontrol()},
   ucretDokun(d,el){el.dataset.touched='1'},
   formSifirla(){render()},
+  randevuOnay(){A._rOnay=1;try{A.randevuKaydet()}finally{A._rOnay=0}},
   randevuKaydet(){
     const tur=rTur(),ad=val('r_ad'),tel=val('r_tel'),sub=val('r_sube'),uz=val('r_uzman'),tarih=val('r_tarih'),saat=val('r_saat'),oda=val('r_oda');
     const cocuk=tur==='Çocuk'||tur==='Ergen';
@@ -1844,6 +1862,14 @@ const A={
     const e=cakisma({tarih,saat,uzmanId:uz,odaId:oda,subeId:sub,danisanId:val('r_did')});if(e.length){toast(e[0],1);formKontrol();$('#r_msg').scrollIntoView({block:'center',behavior:'smooth'});return}
     const kaynak=rKaynak();const did=val('r_did');let d=did?D(did):null;const fid=kaynak==='firma'?val('r_firma'):null;
     if(kaynak==='firma'&&!fid){toast('Firma seçin.',1);$('#r_firma').focus();return}
+    if(!A._rOnay){const u=U(uz),o=O(oda);const ali=[['sms_ana',tel||(!cocuk?'':'')],['sms_es',tur==='Çift'&&val('r_es_tel')],['sms_anne',cocuk&&val('r_anne_tel')],['sms_baba',cocuk&&val('r_baba_tel')]].filter(([i,t])=>$('#'+i)&&chk(i)&&t).length;
+      const istiyor=['sms_ana','sms_es','sms_anne','sms_baba'].some(i=>$('#'+i)&&chk(i));
+      sheet('Randevuyu onaylayın',`<p class="small muted" style="margin:0">Bilgileri kontrol edin. Onayladığınızda randevu oluşturulur${u.sms?' ve SMS’ler gönderilir':''}.</p>
+        ${ozet([['Danışan',`<b>${esc(ad)}</b>${did?'':' <span class="badge b-bekliyor">Yeni kayıt</span>'}${tur==='Çift'&&val('r_es_ad')?` · ${esc(val('r_es_ad'))}`:''}`],['Seans türü',esc(tur)],
+          ['Kaynak',esc(KAYNAK[kaynak]||'')+(fid&&F(fid)?' · '+esc(F(fid).ad):'')],['Tarih',`<b>${tamTarih(tarih)}</b>`],['Saat',`<b>${saat}</b>`],
+          ['Uzman',esc(u.ad)],['Şube',esc(B(sub).ad)],['Oda',esc(o?o.ad:'')+(o&&onlineMi({odaId:oda})?' · online':'')],['SMS',smsOzet(uz,istiyor,ali)]])}`,
+        `<button class="btn" data-act="kapat">Düzenle</button><button class="btn primary" data-act="randevuOnay">Onayla ve oluştur</button>`);return}
+    kapat();
     const person=(a,t)=>val(a)?{ad:val(a),tel:val(t)}:null;
     if(!d){d={id:uid('d'),ad,tel:tel||val('r_anne_tel')||val('r_baba_tel'),subeId:sub,tur,es:null,anne:null,baba:null,sms:{},firmaId:null,arsiv:0,takipUzman:uz,sahipUzmanId:kaynak==='kendi'?uz:null,kayit:TODAY};S.danisanlar.push(d)}
     else{d.ad=ad;if(tel)d.tel=tel;d.tur=tur;if(kaynak==='kendi'&&!d.sahipUzmanId)d.sahipUzmanId=uz}
