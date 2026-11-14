@@ -361,6 +361,13 @@ table.cal{border-collapse:separate;border-spacing:0;min-width:100%}
   .cell.full.paid b::after{content:"✓";font-size:.62rem;margin-left:1px}
   .cal .cell.empty{font-size:1rem;color:color-mix(in srgb,var(--accent) 30%,transparent)}
 }
+.kvkk-ok{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--ok);margin-left:6px;vertical-align:middle;flex:none}
+.kvkk-yok{display:inline-block;width:9px;height:9px;border-radius:50%;border:1.5px solid var(--muted);flex:none}
+.kvkk-satir{display:flex;align-items:center;gap:10px;font-size:.85rem;border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+.kvkk-satir .kvkk-ok{margin-left:0}
+.kvkk-yazi{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
+.kvkk-yazi b{font-weight:600}
+.kvkk-chk{margin-top:4px;font-weight:600}
 .cell-cok{display:flex;flex-direction:column;gap:3px}
 .cell-cok .cell{min-height:40px}
 .cell-say{font-size:.68rem;font-weight:700;color:var(--accent);text-align:center}
@@ -1035,7 +1042,7 @@ function seansCard(s,opt){opt=opt||{};
   }
   return`<article class="scard st-${s.durum} t-${TK[s.tur]}">
     <div class="s-time">${s.saat}<small>${esc(o?o.ad:'')}</small></div>
-    <div class="s-main"><button class="s-name" style="background:none;border:0;padding:0;text-align:left" data-act="${opt.psikolog?'pDanisan':'danisanDetay'}" data-id="${d.id}">${esc(d.ad)}${fs?`<span class="badge b-firma">${esc(fs.ad)}</span>`:''}</button>
+    <div class="s-main"><button class="s-name" style="background:none;border:0;padding:0;text-align:left" data-act="${opt.psikolog?'pDanisan':'danisanDetay'}" data-id="${d.id}">${esc(d.ad)}${kvkkNokta(d)}${fs?`<span class="badge b-firma">${esc(fs.ad)}</span>`:''}</button>
       <div class="s-meta">${tchip(s.tur)}${s.sadeceEbeveyn?'<span class="tchip t-coc">Ebeveyn görüşmesi</span>':''}<span>${opt.psikolog?esc(B(s.subeId).ad)+' şubesi':esc(u.ad)}</span><span>· ${kayAd(s.kaynak)}</span></div></div>
     <div class="s-side">${sBadge(s)}${fin?(fs?'<b class="small muted">Ücretsiz</b>':`<b>${TL(s.durum==='odendi'?s.odeme.tahsilat:s.ucret)}</b>`):''}</div>
     ${act?`<div class="s-act">${act}</div>`:''}
@@ -1058,11 +1065,16 @@ function vGorusmeler(){
   <select class="inp" style="width:auto;min-height:38px;padding:4px 10px" data-chg="gUzman" aria-label="Uzman filtresi"><option value="all">Tüm uzmanlar</option>${uz.map(u=>`<option value="${u.id}" ${gf.uzman===u.id?'selected':''}>${esc(u.ad)}</option>`).join('')}</select></div>
   ${gunGrupla(list)}`}
 
+/* KVKK: imzalı kağıt form alındı mı (danışan başına bir kez işaretlenir) */
+const kvkkNokta=d=>d&&d.kvkk?`<span class="kvkk-ok" title="İmzalı KVKK formu alındı (${fmtD(d.kvkk.t,{day:'numeric',month:'short',year:'numeric'})})" aria-label="KVKK formu alındı"></span>`:'';
+const kvkkKutu=(d,p)=>d.kvkk?`<div class="small" style="color:var(--ok);display:flex;align-items:center;gap:6px">${kvkkNokta(d)} İmzalı KVKK formu alındı · ${fmtD(d.kvkk.t,{day:'numeric',month:'short',year:'numeric'})}</div>`
+  :`<label class="chk kvkk-chk"><input type="checkbox" id="${p}_kvkk"> İmzalı KVKK formu alındı</label>`;
+function kvkkIsle(d,p){const e=$('#'+p+'_kvkk');if(!e||!e.checked||d.kvkk)return false;const h=aktifHesap();d.kvkk={t:TODAY,k:`${h.ad} · ${h.rol}`};return true}
 /* Tahsilat */
 function tahsilatSheet(id){const s=SE(id),d=D(s.danisanId),u=U(s.uzmanId);const vo=oran(s);
-  sheet('Tahsilat al',`<div class="secili"><div class="grow"><b>${esc(d.ad)}</b><span class="small muted">${fmtD(s.tarih)} ${s.saat} · ${esc(u.ad)} · ${s.tur}</span></div>${tchip(s.tur)}</div>
+  sheet('Tahsilat al',`<div class="secili"><div class="grow"><b>${esc(d.ad)}${kvkkNokta(d)}</b><span class="small muted">${fmtD(s.tarih)} ${s.saat} · ${esc(u.ad)} · ${s.tur}</span></div>${tchip(s.tur)}</div>
   ${odemeAlanlari('t',s.ucret,true,vo,`${kayAd(s.kaynak)} için ${esc(u.ad)} varsayılanı %${vo}`,'Nakit')}
-  <div class="calc" id="t_prev"></div>`,
+  <div class="calc" id="t_prev"></div>${kvkkKutu(d,'t')}`,
   `<button class="btn" data-act="kapat">Vazgeç</button><button class="btn primary" data-act="tahsilatKaydet" data-id="${id}">Tahsilatı kapat</button>`);
   A._tid=id;A.tCalc()}
 function odemeAlanlari(p,tutar,kdvli,oranV,ipucu,kanal){return`
@@ -1273,7 +1285,7 @@ function dFiltre(list,q){if(!q)return list;const ql=low(q),qd=digits(q);
 function hl(t,q){if(!q||q.length<2)return esc(t);const i=low(t).indexOf(low(q));if(i<0)return esc(t);return esc(t.slice(0,i))+'<mark>'+esc(t.slice(i,i+q.length))+'</mark>'+esc(t.slice(i+q.length))}
 // Psikolog telefon görme izni kapalıyken bile kendi getirdiği danışanların numarasını görür
 const telGorur=(d,u)=>!u||u.telGor||d.sahipUzmanId===u.id||S.seanslar.some(s=>s.danisanId===d.id&&s.uzmanId===u.id&&s.kaynak==='kendi');
-function dRows(list,q,act,maskTel){return list.map(d=>`<button class="row t-${TK[d.tur]}" data-act="${act}" data-id="${d.id}"><span class="av">${ini(d.ad)}</span><span style="min-width:0"><span class="nm">${hl(d.ad,q)}${d.firmaId?`<span class="badge b-firma">${esc(F(d.firmaId).ad)}</span>`:''}</span><span class="mt">${maskTel&&!telGorur(d,maskTel)?'Telefon gizli':esc(d.tel)} · ${d.tur?d.tur+' · ':''}${esc(B(d.subeId).ad)}</span></span><span class="cnt">${toplamSeans(d)}<small>seans</small></span></button>`).join('')}
+function dRows(list,q,act,maskTel){return list.map(d=>`<button class="row t-${TK[d.tur]}" data-act="${act}" data-id="${d.id}"><span class="av">${ini(d.ad)}</span><span style="min-width:0"><span class="nm">${hl(d.ad,q)}${kvkkNokta(d)}${d.firmaId?`<span class="badge b-firma">${esc(F(d.firmaId).ad)}</span>`:''}</span><span class="mt">${maskTel&&!telGorur(d,maskTel)?'Telefon gizli':esc(d.tel)} · ${d.tur?d.tur+' · ':''}${esc(B(d.subeId).ad)}</span></span><span class="cnt">${toplamSeans(d)}<small>seans</small></span></button>`).join('')}
 function dListHTML(){const q=UI.dq||'';let list=sorted();if(UI.dk!=='tum')list=list.filter(d=>d.subeId===UI.subeId);list=dFiltre(list,q);
   const per=50,pages=Math.max(1,Math.ceil(list.length/per));UI.dp=Math.min(UI.dp||0,pages-1);const st=UI.dp*per;
   if(!list.length)return`<div class="empty"><b>Sonuç bulunamadı</b>“${esc(q)}” ile eşleşen danışan yok. Yeni randevu formundan kayıt oluşturabilirsiniz.</div>`;
@@ -1288,6 +1300,8 @@ function danisanDetay(id,psk){const d=D(id);const self=psk?U(UI.uzmanId):null;
   const nF=ses.filter(s=>s.kaynak==='firma').length,uc=ses.filter(s=>s.kaynak!=='firma'),odenen=uc.filter(s=>s.durum==='odendi').reduce((a,s)=>a+s.odeme.tahsilat,0),bekleyen=uc.filter(s=>s.durum==='bekliyor').reduce((a,s)=>a+s.ucret,0);
   const tutar=s=>s.kaynak==='firma'?'Ücretsiz · firma':s.durum==='odendi'?`${TL(s.odeme.tahsilat)}${s.odeme.kanal?' · '+s.odeme.kanal:''}`:`${TL(s.ucret)} · ödenmedi`;
   sheet(esc(d.ad),`${d.anonim?`<div class="small muted">Kişisel verileri ${fmtD(d.anonim,{day:'numeric',month:'long',year:'numeric'})} tarihinde silindi (KVKK).</div>`:''}<div class="chips">${tchip(d.tur)}<span class="badge b-pasif">${esc(B(d.subeId).ad)} şubesi</span>${d.firmaId&&F(d.firmaId)?`<span class="badge b-firma">${esc(F(d.firmaId).ad)}</span>`:''}${d.sahipUzmanId?`<span class="badge b-pasif">Kendi danışanı: ${esc(U(d.sahipUzmanId).ad)}</span>`:''}</div>
+  <div class="kvkk-satir">${d.kvkk?`${kvkkNokta(d)}<span class="kvkk-yazi"><b>KVKK formu alındı</b><small class="muted">${fmtD(d.kvkk.t,{day:'numeric',month:'short',year:'numeric'})}${d.kvkk.k?' · '+esc(d.kvkk.k):''}</small></span><button class="btn sm ghost" data-act="kvkkDegis" data-id="${d.id}">Geri al</button>`
+    :`<span class="kvkk-yok"></span><span class="kvkk-yazi"><b>KVKK formu işaretlenmedi</b></span>${d.anonim?'':`<button class="btn sm" data-act="kvkkDegis" data-id="${d.id}">Alındı</button>`}`}</div>
   <div class="ccards">${d.tur!=='Çocuk'?`<div class="ccard"><small>Danışan</small><b>${esc(d.ad)}</b>${T(d.tel)}</div>`:''}${kart('Eş / partner',d.es)}${kart('Anne',d.anne)}${kart('Baba',d.baba)}${kart('Veli',d.veli)}</div>
   <div class="stats"><div class="stat"><span class="k">Toplam seans</span><span class="v">${ars+ses.length}</span><span class="d">${psk?'Sizinle yapılan':[ars?`Arşiv ${ars}`:'',nF?`Firma ${nF}`:'',`Ücretli ${uc.length}`].filter(Boolean).join(' + ')}</span></div>
   ${!psk&&nF?`<div class="stat"><span class="k">Firma kapsamında</span><span class="v">${nF}</span><span class="d">${esc(F(ses.find(s=>s.kaynak==='firma').firmaId).ad)} · ücretsiz</span></div>`:''}
@@ -1875,7 +1889,15 @@ const A={
   ySube(d){UI.ySube=d.v;render()},
   kaynakDegis(){formYenile();const d=val('r_did')?D(val('r_did')):null;if(rKaynak()==='firma'&&!val('r_firma')&&d&&d.firmaId&&[...$('#r_firma').options].some(o=>o.value===d.firmaId)){$('#r_firma').value=d.firmaId;formYenile()}},
   
-  firmaTamamla(d){const s=SE(d.id);s.durum='odendi';s.odeme=SIFIR(TODAY);iz(s,'Firma seansı tamamlandı');kapat();commit();
+  // Firma seansı: KVKK formu henüz işaretlenmemişse küçük bir onay ekranı açılır, işaretliyse tek dokunuşla tamamlanır
+  kvkkDegis(d,el){const dn=D(d.id);if(dn.kvkk&&!el.classList.contains('sure')){el.classList.add('sure');el.textContent='Emin misiniz?';return}
+    if(dn.kvkk)delete dn.kvkk;else{const h=aktifHesap();dn.kvkk={t:TODAY,k:`${h.ad} · ${h.rol}`}}commit();danisanDetay(d.id,aktifRol()==='psikolog');toast(dn.kvkk?'KVKK formu alındı olarak işaretlendi.':'KVKK işareti kaldırıldı.')},
+  firmaTamamla(d){const s=SE(d.id),dn=D(s.danisanId);
+    if(!dn.kvkk&&!d.onay){sheet('Firma seansını tamamla',`<div class="secili"><div class="grow"><b>${esc(dn.ad)}</b><span class="small muted">${fmtD(s.tarih)} ${s.saat} · ${esc(U(s.uzmanId).ad)} · ${esc((F(s.firmaId)||{}).ad||'Firma')}</span></div>${tchip(s.tur)}</div>
+      <p class="small muted" style="margin:0">Firma kapsamında · danışandan ücret alınmaz.</p>${kvkkKutu(dn,'f')}`,
+      `<button class="btn" data-act="kapat">Vazgeç</button><button class="btn primary" data-act="firmaTamamla" data-id="${s.id}" data-onay="1">Tamamlandı</button>`);return}
+    if(kvkkIsle(dn,'f'))iz(s,'İmzalı KVKK formu alındı olarak işaretlendi');
+    s.durum='odendi';s.odeme=SIFIR(TODAY);iz(s,'Firma seansı tamamlandı');kapat();commit();
     toast('Firma seansı tamamlandı.')},
   sdKaynak(){const s=SE(A._sid);const k=val('sd_kaynak');const uc=$('#sd_ucret');$('#sd_firmaBox').hidden=k!=='firma';
     if(k==='firma'){uc.value=0;uc.disabled=true}
@@ -2013,6 +2035,7 @@ const A={
   tCalc(){const c=odemeHes('t');$('#t_prev').innerHTML=calcHtml(c,'t');const o=$('#t_oran');$('#t_orannot').style.color=+o.value!==+o.dataset.varsayilan?'var(--warn)':'';},
   tahsilatKaydet(d){const s=SE(d.id);const c=odemeHes('t');if(!(c.tahsilat>0)){toast('Geçerli bir tutar girin.',1);return}
     const ov=+val('t_oran');if(!(ov>=0&&ov<=100)){toast('Ofis payı 0 ile 100 arasında olmalı.',1);return}
+    if(kvkkIsle(D(s.danisanId),'t'))iz(s,'İmzalı KVKK formu alındı olarak işaretlendi');
     s.ucret=+val('t_brut');s.durum='odendi';s.odeme={...c,kanal:document.querySelector('input[name="t_kanal"]:checked').value,tarih:TODAY};
     iz(s,`Tahsilat ${TL(c.tahsilat)} · ${c.kdvOran?"KDV'li":"KDV'siz"} · ofis %${c.oran}${c.oran!==oran(s)?` (varsayılan %${oran(s)})`:''} · ${s.odeme.kanal}`);kapat();commit();toast(`Tahsilat kapatıldı · ${TL(c.tahsilat)}`)},
   tahsilatGeri(d){const s=SE(d.id);iz(s,`Tahsilat geri alındı (${TL(s.odeme?s.odeme.tahsilat:0)})`);s.durum='bekliyor';s.odeme=null;kapat();commit();toast('Tahsilat geri alındı.')},
