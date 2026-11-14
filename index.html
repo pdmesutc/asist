@@ -311,7 +311,8 @@ input[type="date"]::-webkit-date-and-time-value{text-align:center;margin:0 auto;
 .telmsg.err{color:var(--bad)}
 .field input[aria-invalid="true"]{border-color:var(--bad)}
 .kdvrow{display:flex;gap:10px;align-items:center}
-.kdvrow input[type=number]{flex:1;min-width:0}
+.kdvrow input[type=number],.kdvrow input[type=password]{flex:1;min-width:0}
+.inp{max-width:100%}
 .kdvchk{flex:none;border:1px solid var(--line);border-radius:10px;padding:0 12px;min-height:46px;background:var(--surface);font-weight:600}
 .kanal{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
 :where(.dl button.row),:where(.cell.full),:where(.scard){--tc:var(--accent)}
@@ -1358,7 +1359,7 @@ function vGiderler(){const[b,e]=perRange();const list=S.masraflar.filter(m=>m.su
   ${perBar(['hafta','ay','ozel'])}
   <form class="card" data-submit="gEkle"><h2>Gider ekle</h2><div class="row2">${fld('Kategori',`<select id="g_kat">${GIDER_KAT.map(k=>`<option>${k}</option>`).join('')}</select>`)}${fld('Tutar (₺)','<input id="g_tutar" type="number" inputmode="decimal" min="0" required>')}</div>
   <div class="row2">${fld('Tarih',`<input id="g_tarih" type="date" value="${TODAY}">`)}${fld('Açıklama','<input id="g_ac" placeholder="Örn. Kasım kirası">')}</div><div style="display:flex;justify-content:flex-end"><button class="btn primary" type="submit">${ic('plus')}Gideri kaydet</button></div></form>
-  <div class="card"><div class="card-h"><h2>${perLabel()} · ${TL(tot)}</h2><div class="chips">${Object.entries(byK).sort((a,c)=>c[1]-a[1]).map(([k,v])=>`<span class="chip" style="cursor:default">${k} <span class="n num">${TL(v)}</span></span>`).join('')}</div></div>
+  <div class="card"><div class="card-h"><h2>${perLabel()} · ${TL(tot)}</h2><div class="chips">${Object.entries(byK).sort((a,c)=>c[1]-a[1]).map(([k,v])=>`<span class="chip" style="cursor:default">${esc(k)} <span class="n num">${TL(v)}</span></span>`).join('')}</div></div>
   ${list.length?`<div class="tw"><table class="tbl"><thead><tr><th>Tarih</th><th>Kategori</th><th>Açıklama</th><th class="r">Tutar</th><th></th></tr></thead><tbody>${list.map(m=>`<tr><td class="num">${fmtD(m.tarih,{day:'numeric',month:'short'})}</td><td>${esc(m.kategori)}</td><td>${esc(m.aciklama)}</td><td class="r">${TL(m.tutar)}</td><td class="r"><button class="btn sm danger" data-act="gSil" data-id="${m.id}">Sil</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty"><b>Bu dönemde gider yok</b>Yukarıdaki formdan ekleyebilirsiniz.</div>'}</div>`}
 
 /* ============ Toplu SMS ============ */
@@ -1394,7 +1395,9 @@ function vFirma(){if(UI.per.tip==='gun'||UI.per.tip==='hafta'){UI.per.tip='ay'}
   <div class="stats"><div class="stat"><span class="k">Firma kapsamında seans</span><span class="v">${list.length}</span><span class="d">${tam} tamamlandı · ${list.length-tam} planlı/bekleyen</span></div><div class="stat"><span class="k">Danışan</span><span class="v">${dset.length}</span><span class="d">Firma kapsamında görüşen</span></div></div>
   ${list.length?`<div class="tw"><table class="tbl"><thead><tr><th>Tarih</th><th>Danışan</th><th>Uzman</th><th>Tür</th><th>Durum</th></tr></thead><tbody>${list.map(s=>`<tr><td class="num">${fmtD(s.tarih,{day:'2-digit',month:'2-digit',year:'numeric'})} ${s.saat}</td><td>${esc(D(s.danisanId).ad)}</td><td>${esc(U(s.uzmanId).ad)}</td><td>${s.tur||'—'}</td><td>${sBadge(s)}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="4">Toplam</td><td>${list.length} seans</td></tr></tfoot></table></div>`:'<div class="empty"><b>Bu dönemde firma seansı yok</b></div>'}`
   :'<div class="empty"><b>Bu şubeye tanımlı kurumsal firma yok</b>Yönetici panelinden firma ekleyebilirsiniz.</div>'}`}
-function csvMetni(){const[b,e]=perRange();const list=firmaListe(UI.fsec,b,e,UI.subeId);const q=x=>'"'+String(x).replace(/"/g,'""')+'"';
+// CSV hücresi: Excel'de formül olarak çalışmasın diye =, +, -, @ ile başlayan metinlerin başına ' eklenir
+const csvHucre=v=>{let t=String(v??'');if(/^[=+\-@\t\r]/.test(t)&&!/^-?\d+([.,]\d+)?$/.test(t))t="'"+t;return'"'+t.replace(/"/g,'""')+'"'};
+function csvMetni(){const[b,e]=perRange();const list=firmaListe(UI.fsec,b,e,UI.subeId);const q=csvHucre;
   return['Tarih;Saat;Danışan;Uzman;Tür;Durum'].concat(list.map(s=>[s.tarih,s.saat,D(s.danisanId).ad,U(s.uzmanId).ad,s.tur||'',s.durum==='odendi'?'Tamamlandı':durumAd[s.durum]].map(q).join(';'))).join('\n')}
 
 /* ============ YÖNETİCİ ============ */
@@ -1424,7 +1427,7 @@ function odaIstat(){const m={};S.seanslar.forEach(x=>{if(x.durum==='iptal'||!x.o
 const odaIstatYaz=o=>!o?'Hiç seans yok':`${o.n} seans · son: ${fmtD(o.son,{day:'numeric',month:'short',year:'numeric'})}${o.plan?` · ${o.plan} planlı`:''}`;
 function vSubeler(){return`<div class="page-head"><div><h1>Şubeler & Odalar</h1><p>${S.subeler.length} şube · ${S.odalar.length} oda</p></div><button class="btn primary" data-act="subeDuz" data-id="">${ic('plus')}Şube ekle</button></div>
   <div class="grid2">${(()=>{const st=odaIstat();return S.subeler.map(sb=>{const rooms=subeOdalari(sb.id);return`<div class="lc"><div class="lc-h"><div><b>${esc(sb.ad)}</b><div class="small muted">${esc(sb.adres)}</div></div><span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn sm" data-act="gozlem" data-v="${sb.id}" title="Bu şubenin asistan ekranlarını görün (danışanlar, görüşmeler)">${ic('eye')}Gözlem</button><button class="btn sm" data-act="subeDuz" data-id="${sb.id}">Düzenle</button></span></div>
-   <div class="meta"><span>Çalışma <strong class="num">${sb.acilis}–${sb.kapanis}</strong></span><span>Tel <strong>${esc(sb.tel||'—')}</strong></span>${sb.harita?`<a href="${esc(sb.harita)}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">Haritada aç ↗</a>`:''}</div>
+   <div class="meta"><span>Çalışma <strong class="num">${sb.acilis}–${sb.kapanis}</strong></span><span>Tel <strong>${esc(sb.tel||'—')}</strong></span>${/^https?:\/\//i.test(sb.harita||'')?`<a href="${esc(sb.harita)}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">Haritada aç ↗</a>`:''}</div>
    <div class="rooms">${rooms.map((o,i)=>`<div><span><b style="font-weight:600">${esc(o.ad)}</b> <span class="tchip t-${OK[o.tur]}">${o.tur}</span><span class="small muted" style="display:block">${odaIstatYaz(st[o.id])}</span></span><span style="display:inline-flex;align-items:center"><span class="oda-sira"><button class="btn sm ghost" data-act="odaSira" data-id="${o.id}" data-y="-1" ${i?'':'disabled'} aria-label="${esc(o.ad)} yukarı taşı">▲</button><button class="btn sm ghost" data-act="odaSira" data-id="${o.id}" data-y="1" ${i<rooms.length-1?'':'disabled'} aria-label="${esc(o.ad)} aşağı taşı">▼</button></span><button class="btn sm ghost" data-act="odaDuz" data-id="${o.id}" data-s="${sb.id}">Düzenle</button></span></div>`).join('')||'<div class="muted small">Oda yok</div>'}</div>
    <button class="btn sm" data-act="odaDuz" data-id="" data-s="${sb.id}">${ic('plus')}Oda ekle</button></div>`}).join('')})()}</div>`}
 
@@ -2260,7 +2263,7 @@ const A={
     <span class="small muted">Asistanın ve psikoloğun randevu ekranları, oda takvimi ve uzman müsaitlik ekranı bu aralığı kullanır. Kapanış, son seansın bittiği saattir (ör. 22:00 → son seans 21:00).</span>
     ${SUNUCU?`<div class="sub-box"><span class="lbl">Asistan hesapları</span><span class="small muted">Asistanların giriş hesapları <b>Hesaplar</b> ekranından açılır. Bir şubede birden fazla asistan olabilir.</span></div>`:`<div class="sub-box"><span class="lbl">Asistan girişi</span><div class="row2">${fld('E-posta',`<input id="sb_ak" type="email" inputmode="email" autocapitalize="none" spellcheck="false" value="${esc(s.asistan?s.asistan.email:'')}">`)}${fld('Şifre',`<input id="sb_as" type="text" autocomplete="off" value="${SUNUCU?'':esc(s.asistan?s.asistan.sifre:'')}" placeholder="${SUNUCU?(d.id?'Değiştirmek için yeni şifre':'En az 10 karakter'):'En az 6 karakter'}">`)}</div><span class="small muted">Şubenin asistanı bu e-posta ve şifreyle giriş yapar.</span></div>`}`,
     `<button class="btn" data-act="kapat">Vazgeç</button><button class="btn primary" data-act="subeKaydet" data-id="${d.id}">Kaydet</button>`)},
-  subeKaydet(d){const ad=val('sb_ad');if(!ad){toast('Şube adı gerekli.',1);return}{const h=telHata([['sb_tel','Şube telefonu',false]]);if(h){toast(h,1);return}}const x={ad,adres:val('sb_adres'),tel:val('sb_tel'),harita:val('sb_harita'),acilis:val('sb_ac'),kapanis:val('sb_kp')};
+  subeKaydet(d){const ad=val('sb_ad');if(!ad){toast('Şube adı gerekli.',1);return}{const h=telHata([['sb_tel','Şube telefonu',false]]);if(h){toast(h,1);return}}const x={ad,adres:val('sb_adres'),tel:val('sb_tel'),harita:/^https?:\/\//i.test(val('sb_harita'))?val('sb_harita'):'',acilis:val('sb_ac'),kapanis:val('sb_kp')};
     if(x.acilis>=x.kapanis){toast('Kapanış saati açılıştan sonra olmalı.',1);return}
     if(SUNUCU){const id=d.id||uid('b');if(d.id)Object.assign(B(d.id),x);else S.subeler.push({id,...x});kapat();commit();toast(d.id?'Şube kaydedildi.':'Şube eklendi. Asistan hesabını Hesaplar ekranından açabilirsiniz.');return}
     const ak=val('sb_ak'),as=val('sb_as');if(!EPOSTA_RE.test(ak)){toast('Asistan için geçerli bir e-posta girin.',1);$('#sb_ak').focus();return}
@@ -2359,7 +2362,7 @@ Object.assign(A,{
   olFiltre(){OL.f={grup:val('ol_grup'),kisi:val('ol_kisi'),bas:val('ol_bas'),bit:val('ol_bit')};OL.sayfa=0;OL.liste=null;render()},
   olYenile(){OL.liste=null;OL.hata='';render()},
   olSayfa(d){OL.sayfa=Math.max(0,OL.sayfa+Number(d.v));OL.liste=null;render();scrollTo(0,0)},
-  olCsv(){const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';const t=['Zaman;Olay;Kişi;Rol;Ayrıntı;Cihaz;IP'].concat((OL.liste||[]).map(r=>[r.zaman,OLAY_AD[r.olay]||r.olay,olKisi(r),ROL_AD[r.rol]||r.rol||'',olDetay(r),tarayiciAd(r.tarayici),r.ip||''].map(q).join(';'))).join('\n');
+  olCsv(){const q=csvHucre;const t=['Zaman;Olay;Kişi;Rol;Ayrıntı;Cihaz;IP'].concat((OL.liste||[]).map(r=>[r.zaman,OLAY_AD[r.olay]||r.olay,olKisi(r),ROL_AD[r.rol]||r.rol||'',olDetay(r),tarayiciAd(r.tarayici),r.ip||''].map(q).join(';'))).join('\n');
     const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+t],{type:'text/csv;charset=utf-8'}));a.download=`olay_kaydi_${TODAY}.csv`;document.body.appendChild(a);a.click();a.remove()},
   hsf(d){UI.hsf=d.v;render()},
   hsDuz(d){const h=hsBul(d.id);if(!h)return;const g=hsBag(h);
