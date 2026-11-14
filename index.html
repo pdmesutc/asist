@@ -361,6 +361,13 @@ table.cal{border-collapse:separate;border-spacing:0;min-width:100%}
   .cell.full.paid b::after{content:"✓";font-size:.62rem;margin-left:1px}
   .cal .cell.empty{font-size:1rem;color:color-mix(in srgb,var(--accent) 30%,transparent)}
 }
+.cell-cok{display:flex;flex-direction:column;gap:3px}
+.cell-cok .cell{min-height:40px}
+.cell-say{font-size:.68rem;font-weight:700;color:var(--accent);text-align:center}
+.cell-ekle{border:1px dashed color-mix(in srgb,var(--accent) 45%,transparent);background:transparent;color:var(--accent);border-radius:7px;font-size:.72rem;font-weight:600;padding:3px 2px;cursor:pointer}
+.cell-ekle:hover,.cell-ekle:focus{background:var(--accent-soft)}
+.oda-sira{display:inline-flex;gap:2px;margin-right:4px}
+.oda-sira .btn{padding:2px 7px;min-width:0}
 .cell.empty{background:transparent;color:transparent;align-items:center;justify-content:center;font-size:1.2rem}
 .cell.empty:hover,.cell.empty:focus{background:var(--accent-soft);color:var(--accent)}
 .cell.closed{background:repeating-linear-gradient(45deg,var(--surface-2),var(--surface-2) 6px,transparent 6px,transparent 12px);cursor:default}
@@ -520,6 +527,10 @@ const TURLER=['Yetişkin','Çocuk','Ergen','Çift'];
 const TK={'Yetişkin':'yet','Çocuk':'coc','Ergen':'erg','Çift':'cift'};
 const ODA_TURLERI=['Yetişkin Odası','Çocuk/Oyun Odası','Çift Odası','Online Oda','Skype Odası'];
 const OK={'Yetişkin Odası':'yet','Çocuk/Oyun Odası':'coc','Çift Odası':'cift','Online Oda':'onl','Skype Odası':'onl'};
+// Online/Skype odası: fiziksel oda değil, aynı saatte birden fazla seans alabilir
+const onlineOda=o=>!!o&&OK[o.tur]==='onl';
+// Şubenin odaları, yöneticinin belirlediği sırayla
+const subeOdalari=sid=>S.odalar.filter(o=>o.subeId===sid).map((o,i)=>[o,i]).sort((a,b)=>((a[0].sira??1e4)-(b[0].sira??1e4))||a[1]-b[1]).map(x=>x[0]);
 const UYUM={'Yetişkin':['Yetişkin Odası','Online Oda','Skype Odası','Çift Odası'],'Çocuk':['Çocuk/Oyun Odası','Yetişkin Odası'],'Ergen':['Yetişkin Odası','Çocuk/Oyun Odası','Online Oda','Skype Odası'],'Çift':['Çift Odası','Yetişkin Odası','Online Oda','Skype Odası']};
 const GIDER_KAT=['Kira','Elektrik / Su / Doğalgaz','İnternet / Telefon','Mutfak','Kırtasiye','Temizlik','Bakım / Onarım','Diğer'];
 function rng(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
@@ -846,13 +857,13 @@ function cakisma({tarih,saat,uzmanId,odaId,subeId,haricId,danisanId}){
   S.seanslar.forEach(s=>{if(s.id===haricId||s.durum==='iptal'||s.tarih!==tarih||s.saat!==saat)return;
     if(s.uzmanId===uzmanId)e.push(`Uzmanın bu saatte başka seansı var (${B(s.subeId).ad} · ${D(s.danisanId).ad}).`);
     if(danisanId&&s.danisanId===danisanId&&s.uzmanId!==uzmanId)e.push(`Danışanın bu saatte başka seansı var (${B(s.subeId).ad} · ${U(s.uzmanId).ad}).`);
-    if(odaId&&s.odaId===odaId)e.push(`${O(odaId).ad} dolu (${D(s.danisanId).ad}).`)});
+    if(odaId&&s.odaId===odaId&&!onlineOda(O(odaId)))e.push(`${O(odaId).ad} dolu (${D(s.danisanId).ad}).`)});
   return[...new Set(e)];
 }
 function bosOda(subeId,tarih,saat,tur,haricId){
   const dolu=new Set(S.seanslar.filter(s=>s.id!==haricId&&s.durum!=='iptal'&&s.tarih===tarih&&s.saat===saat).map(s=>s.odaId));
   const pref=UYUM[tur]||[];
-  return S.odalar.filter(o=>o.subeId===subeId&&!dolu.has(o.id)).sort((a,b)=>{const ia=pref.indexOf(a.tur),ib=pref.indexOf(b.tur);return(ia<0?9:ia)-(ib<0?9:ib)})[0]||null;
+  return subeOdalari(subeId).filter(o=>!dolu.has(o.id)||onlineOda(o)).sort((a,b)=>{const ia=pref.indexOf(a.tur),ib=pref.indexOf(b.tur);return(ia<0?9:ia)-(ib<0?9:ib)})[0]||null;
 }
 function takipEden(did){
   const l=S.seanslar.filter(s=>s.danisanId===did&&s.durum!=='iptal');
@@ -1061,7 +1072,7 @@ function calcHtml(c,p){const n=$('#'+p+'_kdvnot');if(n)n.textContent=c.kdvOran?`
 
 /* ============ ASİSTAN: Takvim ============ */
 function vTakvim(){
-  const t=UI.tk||TODAY;const sb=B(UI.subeId);const rooms=S.odalar.filter(o=>o.subeId===UI.subeId);
+  const t=UI.tk||TODAY;const sb=B(UI.subeId);const rooms=subeOdalari(UI.subeId);
   const day=S.seanslar.filter(s=>s.subeId===UI.subeId&&s.tarih===t&&s.durum!=='iptal');
   const kapali=parse(t).getDay()===0;
   const saatler=SAATLER.filter(h=>h>=sb.acilis&&h<sb.kapanis);
@@ -1070,11 +1081,19 @@ function vTakvim(){
   <div class="perbar"><div class="pnav"><button class="icon-btn" data-act="tkShift" data-v="-1" aria-label="Önceki gün">${ic('l')}</button><span class="lab">${t===TODAY?'Bugün · ':''}${fmtD(t,{day:'numeric',month:'long',weekday:'long'})}</span><button class="icon-btn" data-act="tkShift" data-v="1" aria-label="Sonraki gün">${ic('r')}</button><button class="btn sm ghost" data-act="tkToday">Bugün</button></div>
   <div class="legend" style="margin-left:auto">${TURLER.map(x=>`<span class="t-${TK[x]}">${x}</span>`).join('')}<span class="lg-ok">✓ Ödendi</span></div></div>
   ${kapali?`<div class="empty"><b>Pazar · şube kapalı</b>Başka bir gün seçin.</div>`:`<div class="calw"><table class="cal"><thead><tr><th>Saat</th>${rooms.map(r=>`<th title="${esc(r.ad)} · ${r.tur}" class="t-${OK[r.tur]}"><span class="genis">${esc(r.ad)}<small>${r.tur}</small></span><span class="kisa">${esc(odaKisa(r))}</span></th>`).join('')}</tr></thead><tbody>
-  ${saatler.map(h=>`<tr><th scope="row">${h}</th>${rooms.map(r=>{const s=day.find(x=>x.saat===h&&x.odaId===r.id);
+  ${saatler.map(h=>`<tr><th scope="row">${h}</th>${rooms.map(r=>takvimHucre(t,h,r,day)).join('')}</tr>`).join('')}
+  </tbody></table></div>`}`}
+function takvimHucre(t,h,r,day){
+  // Online odada aynı saatte birden fazla seans olabilir: hepsi alt alta, altında "+" ile yenisi eklenir
+  if(onlineOda(r)){const l=day.filter(x=>x.saat===h&&x.odaId===r.id);const pastCell=t<TODAY||(t===TODAY&&parseInt(h)<nowH());
+    if(!l.length)return pastCell?`<td><div class="cell closed" aria-hidden="true"></div></td>`:`<td><button class="cell empty" data-act="bosHucre" data-t="${t}" data-h="${h}" data-o="${r.id}" aria-label="${h} ${esc(r.ad)} boş, randevu oluştur">+</button></td>`;
+    return`<td><div class="cell-cok">${l.map(s=>{const d=D(s.danisanId),u=U(s.uzmanId);return`<button class="cell full t-${TK[s.tur]} ${s.durum==='odendi'?'paid':''}" data-act="seansDetay" data-id="${s.id}" aria-label="${h} ${esc(r.ad)}: ${esc(d.ad)}, ${esc(u.ad)}"><b class="genis">${esc(d.ad)}</b><small class="genis">${esc(u.ad.replace(/^(Uzm\. )?Psk\. /,''))}</small><b class="kisa">${ini(d.ad)}</b><small class="kisa">${ini(u.ad)}</small></button>`}).join('')}
+      ${l.length>1?`<span class="cell-say">${l.length} online seans</span>`:''}${pastCell?'':`<button class="cell-ekle" data-act="bosHucre" data-t="${t}" data-h="${h}" data-o="${r.id}" aria-label="${h} ${esc(r.ad)}: bir online seans daha ekle">+ ekle</button>`}</div></td>`}
+  {const s=day.find(x=>x.saat===h&&x.odaId===r.id);
     if(s){const d=D(s.danisanId),u=U(s.uzmanId);return`<td><button class="cell full t-${TK[s.tur]} ${s.durum==='odendi'?'paid':''}" data-act="seansDetay" data-id="${s.id}" aria-label="${h} ${esc(r.ad)}: ${esc(d.ad)}, ${esc(u.ad)}"><b class="genis">${esc(d.ad)}</b><small class="genis">${esc(u.ad.replace(/^(Uzm\. )?Psk\. /,''))}</small><b class="kisa">${ini(d.ad)}</b><small class="kisa">${ini(u.ad)}</small></button></td>`}
     const pastCell=t<TODAY||(t===TODAY&&parseInt(h)<nowH());
-    return pastCell?`<td><div class="cell closed" aria-hidden="true"></div></td>`:`<td><button class="cell empty" data-act="bosHucre" data-t="${t}" data-h="${h}" data-o="${r.id}" aria-label="${h} ${esc(r.ad)} boş, randevu oluştur">+</button></td>`}).join('')}</tr>`).join('')}
-  </tbody></table></div>`}`}
+    return pastCell?`<td><div class="cell closed" aria-hidden="true"></div></td>`:`<td><button class="cell empty" data-act="bosHucre" data-t="${t}" data-h="${h}" data-o="${r.id}" aria-label="${h} ${esc(r.ad)} boş, randevu oluştur">+</button></td>`}
+}
 function odaKisa(r){let w=r.ad.replace(/\s*(Odası|Oda)(?=\s|$)/i,'').trim()||r.ad;const p=w.split(' ');if(p[0].length>6)p[0]=p[0].slice(0,3)+'.';return p.join(' ')}
 function seansDetay(id){const s=SE(id),d=D(s.danisanId),u=U(s.uzmanId),o=O(s.odaId);
   sheet('Seans detayı',`<div class="secili"><div class="grow"><b>${esc(d.ad)}</b><span class="small muted">${esc(d.tel)}</span></div>${badge(s.durum)}</div>
@@ -1134,8 +1153,10 @@ function oneriCiz(){const box=$('#r_oneri');if(!box)return;const o=RS.oneri;if(!
 function odaDurum(){const box=$('#r_odalar'),os=$('#r_oda');if(!box||!os)return;const sub=val('r_sube'),t=val('r_tarih'),h=val('r_saat');
   if(!t||!h){[...os.options].forEach(o=>{const r=O(o.value);if(r){o.textContent=`${r.ad} · ${r.tur}`;o.disabled=false}});box.innerHTML='<span class="small muted">Saat seçince tüm odaların o saatteki durumu burada görünür.</span>';return}
   const busy={};S.seanslar.forEach(x=>{if(x.durum!=='iptal'&&x.tarih===t&&x.saat===h&&x.subeId===sub)busy[x.odaId]=x});
-  [...os.options].forEach(o=>{const r=O(o.value);if(!r)return;const b=busy[o.value];o.textContent=`${r.ad} · ${b?'Dolu':'Boş'}`;o.disabled=!!b&&o.value!==os.value});
-  box.innerHTML=[...os.options].map(o=>O(o.value)).filter(Boolean).map(r=>{const b=busy[r.id];
+  const onl={};S.seanslar.forEach(x=>{if(x.durum!=='iptal'&&x.tarih===t&&x.saat===h&&onlineOda(O(x.odaId)))onl[x.odaId]=(onl[x.odaId]||0)+1});
+  Object.keys(onl).forEach(k=>delete busy[k]);
+  [...os.options].forEach(o=>{const r=O(o.value);if(!r)return;const b=busy[o.value];o.textContent=`${r.ad} · ${b?'Dolu':onl[r.id]?onl[r.id]+' online seans var':'Boş'}`;o.disabled=!!b&&o.value!==os.value});
+  box.innerHTML=[...os.options].map(o=>O(o.value)).filter(Boolean).map(r=>{const b=busy[r.id];if(onl[r.id])return`<button type="button" class="slot rchip free ${os.value===r.id?'on':''}" data-act="odaSec" data-o="${r.id}"><b>${esc(r.ad)}</b><small>${onl[r.id]} online seans var · yine eklenebilir</small></button>`;
     return b?`<button type="button" class="slot rchip busy" disabled aria-label="${esc(r.ad)} dolu"><b>${esc(r.ad)}</b><small>Dolu · ${esc(D(b.danisanId).ad)} · ${esc(U(b.uzmanId).ad.replace(/^(Uzm\. )?Psk\. /,''))}</small></button>`
     :`<button type="button" class="slot rchip free ${os.value===r.id?'on':''}" data-act="odaSec" data-o="${r.id}"><b>${esc(r.ad)}</b><small>Boş · ${r.tur}</small></button>`}).join('')}
 const rKaynak=()=>{const e=document.querySelector('input[name="r_kaynak"]:checked');return e?e.value:(val('r_kaynak')||'yonlendirme')};
@@ -1155,7 +1176,7 @@ function formYenile(prefUz){
     el.value=u&&!uzmanEngel(u,sub,tur,firma)&&(!val('r_saat')||!uzmanDurum(u,sub,tarih,val('r_saat')))?cur:'';
   }
   const os=$('#r_oda');const ocur=os.value;const pref=UYUM[tur];
-  const rooms=S.odalar.filter(o=>o.subeId===sub).sort((a,b)=>{const ia=pref.indexOf(a.tur),ib=pref.indexOf(b.tur);return(ia<0?9:ia)-(ib<0?9:ib)});
+  const rooms=subeOdalari(sub);
   os.innerHTML=rooms.map(o=>`<option value="${o.id}">${esc(o.ad)} · ${o.tur}</option>`).join('');
   if(rooms.some(o=>o.id===ocur))os.value=ocur;
   const uc=$('#r_ucret');
@@ -1179,7 +1200,7 @@ function slotlarAsistan(){const sub=val('r_sube'),tarih=val('r_tarih'),tur=rTur(
 }
 function sonucBaslik(){const sh=$('#r_sonucH');if(!sh)return;const sub=val('r_sube'),t=val('r_tarih'),h=val('r_saat');if(!h){sh.innerHTML='';return}
   const n=adaylar().filter(u=>!uzmanDurum(u,sub,t,h)).length;const dolu=new Set(S.seanslar.filter(x=>x.durum!=='iptal'&&x.tarih===t&&x.saat===h&&x.subeId===sub).map(x=>x.odaId));
-  const m=S.odalar.filter(o=>o.subeId===sub&&!dolu.has(o.id)).length;
+  const m=S.odalar.filter(o=>o.subeId===sub&&(!dolu.has(o.id)||onlineOda(o))).length;
   sh.innerHTML=`<b>${fmtD(t,{day:'numeric',month:'long',weekday:'long'})} · ${h}</b><span><span class="badge ${n?'b-odendi':'b-iptal'}">${n} uzman müsait</span> <span class="badge ${m?'b-odendi':'b-iptal'}">${m} oda boş</span></span>`}
 function sonucGizle(){const r=$('#r_sonuc');if(!r)return;$('#r_saat').value='';r.hidden=true;$('#r_fa').hidden=true}
 function uzmanListe(){const box=$('#r_uzmanlar');if(!box)return;const sub=val('r_sube'),t=val('r_tarih'),h=val('r_saat');const sel=val('r_uzman');
@@ -1369,9 +1390,9 @@ function vOzet(){if(UI.per.tip==='gun'&&!UI._ozetSet){UI.per.tip='ay';UI._ozetSe
   <div class="card"><h2>Uzman performansı</h2>${uzRows.length?`<div class="tw"><table class="tbl"><thead><tr><th>Uzman</th><th class="r">Seans</th><th class="r">Brüt</th><th class="r">Ofis payı</th><th class="r">Hak ediş</th></tr></thead><tbody>${uzRows.map(([id,x])=>`<tr><td>${esc(U(id).ad)}${U(id).aktif?'':' <span class="badge b-pasif">Pasif</span>'}</td><td class="r">${x.adet}</td><td class="r">${TL(x.brut)}</td><td class="r">${TL(x.ofis)}</td><td class="r">${TL(x.uzman)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty"><b>Bu dönemde veri yok</b></div>'}</div>`}
 
 function vSubeler(){return`<div class="page-head"><div><h1>Şubeler & Odalar</h1><p>${S.subeler.length} şube · ${S.odalar.length} oda</p></div><button class="btn primary" data-act="subeDuz" data-id="">${ic('plus')}Şube ekle</button></div>
-  <div class="grid2">${S.subeler.map(sb=>{const rooms=S.odalar.filter(o=>o.subeId===sb.id);return`<div class="lc"><div class="lc-h"><div><b>${esc(sb.ad)}</b><div class="small muted">${esc(sb.adres)}</div></div><span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn sm" data-act="gozlem" data-v="${sb.id}" title="Bu şubenin asistan ekranlarını görün (danışanlar, görüşmeler)">${ic('eye')}Gözlem</button><button class="btn sm" data-act="subeDuz" data-id="${sb.id}">Düzenle</button></span></div>
+  <div class="grid2">${S.subeler.map(sb=>{const rooms=subeOdalari(sb.id);return`<div class="lc"><div class="lc-h"><div><b>${esc(sb.ad)}</b><div class="small muted">${esc(sb.adres)}</div></div><span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn sm" data-act="gozlem" data-v="${sb.id}" title="Bu şubenin asistan ekranlarını görün (danışanlar, görüşmeler)">${ic('eye')}Gözlem</button><button class="btn sm" data-act="subeDuz" data-id="${sb.id}">Düzenle</button></span></div>
    <div class="meta"><span>Çalışma <strong class="num">${sb.acilis}–${sb.kapanis}</strong></span><span>Tel <strong>${esc(sb.tel||'—')}</strong></span>${sb.harita?`<a href="${esc(sb.harita)}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">Haritada aç ↗</a>`:''}</div>
-   <div class="rooms">${rooms.map(o=>`<div><span><b style="font-weight:600">${esc(o.ad)}</b> <span class="tchip t-${OK[o.tur]}">${o.tur}</span></span><button class="btn sm ghost" data-act="odaDuz" data-id="${o.id}" data-s="${sb.id}">Düzenle</button></div>`).join('')||'<div class="muted small">Oda yok</div>'}</div>
+   <div class="rooms">${rooms.map((o,i)=>`<div><span><b style="font-weight:600">${esc(o.ad)}</b> <span class="tchip t-${OK[o.tur]}">${o.tur}</span></span><span style="display:inline-flex;align-items:center"><span class="oda-sira"><button class="btn sm ghost" data-act="odaSira" data-id="${o.id}" data-y="-1" ${i?'':'disabled'} aria-label="${esc(o.ad)} yukarı taşı">▲</button><button class="btn sm ghost" data-act="odaSira" data-id="${o.id}" data-y="1" ${i<rooms.length-1?'':'disabled'} aria-label="${esc(o.ad)} aşağı taşı">▼</button></span><button class="btn sm ghost" data-act="odaDuz" data-id="${o.id}" data-s="${sb.id}">Düzenle</button></span></div>`).join('')||'<div class="muted small">Oda yok</div>'}</div>
    <button class="btn sm" data-act="odaDuz" data-id="" data-s="${sb.id}">${ic('plus')}Oda ekle</button></div>`}).join('')}</div>`}
 
 function vUzmanlar(){UI.uzf=UI.uzf||'aktif';
@@ -2142,9 +2163,27 @@ const A={
     if(!SUNUCU)return uygula();
     API.cagir('hesap',{rol:'asistan',kod:id,email:ak,sifre:as,ad:ad+' Şubesi'}).then(uygula).catch(e=>toast(e.message,1))},
   odaDuz(d){const o=d.id?O(d.id):{ad:'',tur:'Yetişkin Odası'};
-    sheet(d.id?'Odayı düzenle':'Yeni oda · '+esc(B(d.s).ad),`${fld('Oda adı',`<input id="o_ad" value="${esc(o.ad)}">`)}${fld('Oda türü',`<select id="o_tur">${ODA_TURLERI.map(t=>`<option ${t===o.tur?'selected':''}>${t}</option>`).join('')}</select>`)}`,
+    const hedefler=d.id?subeOdalari(o.subeId).filter(x=>x.id!==o.id):[];const n=d.id?S.seanslar.filter(x=>x.odaId===o.id).length:0;
+    const bir=d.id&&hedefler.length?`<div class="card" style="margin-top:14px;padding:12px"><h3 style="margin:0 0 4px">Odayı birleştir</h3><p class="small muted" style="margin:0 0 8px">Bu odadaki <b>${n}</b> seansın tamamı (geçmiş dahil) seçtiğiniz odaya taşınır, sonra bu oda silinir. Kayıtlar kaybolmaz.</p>
+      ${fld('Taşınacak oda',`<select id="o_hedef"><option value="">Seçin…</option>${hedefler.map(x=>`<option value="${x.id}">${esc(x.ad)} · ${x.tur}</option>`).join('')}</select>`)}
+      <button class="btn" data-act="odaBirlestir" data-id="${o.id}">Birleştir ve bu odayı kaldır</button></div>`:'';
+    sheet(d.id?'Odayı düzenle':'Yeni oda · '+esc(B(d.s).ad),`${fld('Oda adı',`<input id="o_ad" value="${esc(o.ad)}">`)}${fld('Oda türü',`<select id="o_tur">${ODA_TURLERI.map(t=>`<option ${t===o.tur?'selected':''}>${t}</option>`).join('')}</select>`)}${bir}`,
     `${d.id?`<button class="btn danger" data-act="odaSil" data-id="${d.id}">Sil</button>`:''}<button class="btn" data-act="kapat">Vazgeç</button><button class="btn primary" data-act="odaKaydet" data-id="${d.id}" data-s="${d.s}">Kaydet</button>`)},
-  odaKaydet(d){const ad=val('o_ad');if(!ad){toast('Oda adı gerekli.',1);return}if(d.id)Object.assign(O(d.id),{ad,tur:val('o_tur')});else S.odalar.push({id:uid('r'),subeId:d.s,ad,tur:val('o_tur')});kapat();commit();toast('Oda kaydedildi.')},
+  odaKaydet(d){const ad=val('o_ad');if(!ad){toast('Oda adı gerekli.',1);return}if(d.id)Object.assign(O(d.id),{ad,tur:val('o_tur')});else S.odalar.push({id:uid('r'),subeId:d.s,ad,tur:val('o_tur'),sira:Math.max(0,...S.odalar.filter(x=>x.subeId===d.s).map(x=>x.sira||0),subeOdalari(d.s).length)+1});kapat();commit();toast('Oda kaydedildi.')},
+  odaSira(d){const o=O(d.id);const l=subeOdalari(o.subeId);const i=l.indexOf(o),j=i+Number(d.y);if(j<0||j>=l.length)return;
+    [l[i],l[j]]=[l[j],l[i]];l.forEach((x,k)=>{if(x.sira!==k+1)x.sira=k+1});commit()},
+  odaBirlestir(d,el){const o=O(d.id),hid=val('o_hedef');if(!hid){toast('Taşınacak odayı seçin.',1);return}
+    if(SUNUCU&&SENK.sinir){toast('Oda birleştirme yalnızca yönetici panelinden yapılır.',1);return}
+    const h=O(hid);const ls=S.seanslar.filter(x=>x.odaId===o.id);
+    // Başka şubeye kaydedilmiş seans varsa kendi şubesindeki aynı türden odaya gider
+    const hedefOda=x=>{if(x.subeId===h.subeId)return h;const l=subeOdalari(x.subeId);return l.find(r=>r.tur===h.tur)||l.find(r=>r.tur===o.tur)||null};
+    const yok=ls.filter(x=>!hedefOda(x));if(yok.length){toast(`${yok.length} seans başka şubeye kayıtlı ve orada uygun oda yok; önce o şubeye oda ekleyin.`,1);return}
+    // Fiziksel odada aynı saatte iki planlı seans olamaz
+    const cak=ls.filter(x=>{const r=hedefOda(x);return x.durum==='bekliyor'&&!onlineOda(r)&&S.seanslar.some(y=>y.id!==x.id&&y.odaId===r.id&&y.durum==='bekliyor'&&y.tarih===x.tarih&&y.saat===x.saat)});
+    if(cak.length){toast(`${esc(h.ad)} odasında aynı saatte ${cak.length} planlı seans çakışıyor (ilk: ${fmtD(cak[0].tarih,{day:'numeric',month:'short'})} ${cak[0].saat}). Önce bunları taşıyın.`,1);return}
+    if(!el.classList.contains('sure')){el.classList.add('sure');el.textContent=`Emin misiniz? ${ls.length} seans → ${h.ad}`;return}
+    ls.forEach(x=>{const r=hedefOda(x);iz(x,`Oda birleştirildi: ${o.ad} → ${r.ad}`);x.odaId=r.id});
+    S.odalar=S.odalar.filter(x=>x.id!==o.id);kapat();commit();toast(`${ls.length} seans ${h.ad} odasına taşındı; ${o.ad} kaldırıldı.`)},
   odaSil(d,el){const n=S.seanslar.filter(s=>s.odaId===d.id&&s.durum==='bekliyor'&&s.tarih>=TODAY).length;if(n){toast(`Bu odada ${n} planlı seans var; önce taşıyın.`,1);return}
     if(S.seanslar.some(s=>s.odaId===d.id)){toast('Geçmiş kayıtları olan oda silinemez; adını değiştirebilirsiniz.',1);return}
     if(!el.classList.contains('sure')){el.classList.add('sure');el.textContent='Emin misiniz?';return}S.odalar=S.odalar.filter(o=>o.id!==d.id);kapat();commit();toast('Oda silindi.')},
