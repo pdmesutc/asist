@@ -711,11 +711,13 @@ const KEY='asistpsikolog_v1',UIKEY='asistpsikolog_ui_v1';
 /* Sunucu modu: giriş ve hesaplar sunucuda (api/), şifreler tarayıcıda tutulmaz */
 const SUNUCU=!!document.querySelector('meta[name="ap-sunucu"]');
 const API={csrf:'',
-  async cagir(yol,veri){const o={method:veri?'POST':'GET',headers:{'X-Istek':'asistpsikolog'},credentials:'same-origin',cache:'no-store'};
+  async cagir(yol,veri,_tekrar){const o={method:veri?'POST':'GET',headers:{'X-Istek':'asistpsikolog'},credentials:'same-origin',cache:'no-store'};
     if(veri){o.headers['Content-Type']='application/json';o.headers['X-Csrf']=API.csrf;o.body=JSON.stringify(veri)}
     let r;try{r=await fetch('api/'+yol,o)}catch(e){throw new Error('Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin.')}
     let j={};try{j=await r.json()}catch(e){}
     if(j&&j.csrf)API.csrf=j.csrf;
+    // Güvenlik anahtarı eskidiyse (ör. çıkıştan sonra, uzun bekleme) yenisini alıp bir kez daha dene
+    if(r.status===419&&veri&&!_tekrar){try{await API.cagir('oturum')}catch(e){}return API.cagir(yol,veri,true)}
     if(r.status===401&&yol!=='giris'&&UI.rol){oturumDustu();}
     if(!r.ok){const e=new Error((j&&j.hata)||'Bir hata oluştu, tekrar deneyin.');e.kod=r.status;throw e}
     return j}};
@@ -1997,7 +1999,7 @@ const A={
     if(h.pasif){A._hata=(A._hata||0)+1;goster('E-posta veya şifre hatalı.');return}
     A._hata=0;UI.hatirla=chk('g_hatirla');UI.rol=h.rol;UI.gozlem=false;if(h.subeId)UI.subeId=h.subeId;if(h.uzmanId)UI.uzmanId=h.uzmanId;
     UI.view=null;UI.per={tip:'gun',ref:TODAY};UI._ozetSet=0;UI._hkSet=0;render();scrollTo(0,0);toast(`Hoş geldiniz, ${h.ad} · ${ROL_AD[h.rol]} paneli.`)},
-  cikis(){if(SUNUCU){API.cagir('cikis',{}).catch(()=>{});UI.hesap=null;SENK.durdur()}UI.rol=null;UI.gozlem=false;kapat();saveUI();try{location.hash=''}catch(e){}render();toast('Çıkış yapıldı.')},
+  cikis(){if(SUNUCU){API.cagir('cikis',{}).catch(()=>{}).then(()=>{if(!UI.rol)API.cagir('oturum').catch(()=>{})});UI.hesap=null;SENK.durdur()}UI.rol=null;UI.gozlem=false;kapat();saveUI();try{location.hash=''}catch(e){}render();toast('Çıkış yapıldı.')},
   go(d){A._pasifUz=null;if(d.v==='hesaplar'){HS.liste=null;HS.hata=''}UI.view=d.v;kapat();render();scrollTo(0,0)},
   more(){const items=NAV[aktifRol()].slice(4);sheet('Diğer',items.map(i=>`<button class="btn block" style="justify-content:flex-start" data-act="go" data-v="${i[0]}">${ic(i[2])}${i[1]}</button>`).join(''))},
   perTip(d){UI.per.tip=d.v;if(d.v==='ozel'){const[b,e]=perRange();UI.per.bas=UI.per.bas||addDays(TODAY,-30);UI.per.bit=UI.per.bit||TODAY}render()},
