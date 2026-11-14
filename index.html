@@ -364,7 +364,9 @@ table.cal{border-collapse:separate;border-spacing:0;min-width:100%}
 .kvkk-ok,.kvkk-no{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);vertical-align:middle;flex:none}
 .kvkk-no{background:#E24B4A}
 .kvkk-bas{margin-right:6px;position:relative;top:-1px}
-.s-name .kvkk-bas,.dl .nm .kvkk-bas{margin-right:0;top:0}
+/* Nokta adla aynı satırda kalır; uzun ad alt satıra geçerse nokta hizasından devam eder */
+.ad-n{min-width:0;padding-left:14px;text-indent:-14px}
+.ad-n .kvkk-bas{margin-right:6px;text-indent:0}
 .kvkk-yok{display:inline-block;width:9px;height:9px;border-radius:50%;border:1.5px solid var(--muted);flex:none}
 .kvkk-satir{display:flex;align-items:center;gap:10px;font-size:.85rem;border:1px solid var(--line);border-radius:12px;padding:8px 10px}
 .kvkk-yazi{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
@@ -1044,7 +1046,7 @@ function seansCard(s,opt){opt=opt||{};
   }
   return`<article class="scard st-${s.durum} t-${TK[s.tur]}">
     <div class="s-time">${s.saat}<small>${esc(o?o.ad:'')}</small></div>
-    <div class="s-main"><button class="s-name" style="background:none;border:0;padding:0;text-align:left" data-act="${opt.psikolog?'pDanisan':'danisanDetay'}" data-id="${d.id}">${kvkkBas(d)}${esc(d.ad)}${fs?`<span class="badge b-firma">${esc(fs.ad)}</span>`:''}</button>
+    <div class="s-main"><button class="s-name" style="background:none;border:0;padding:0;text-align:left" data-act="${opt.psikolog?'pDanisan':'danisanDetay'}" data-id="${d.id}"><span class="ad-n">${kvkkBas(d)}${esc(d.ad)}</span>${fs?`<span class="badge b-firma">${esc(fs.ad)}</span>`:''}</button>
       <div class="s-meta">${tchip(s.tur)}${s.sadeceEbeveyn?'<span class="tchip t-coc">Ebeveyn görüşmesi</span>':''}<span>${opt.psikolog?esc(B(s.subeId).ad)+' şubesi':esc(u.ad)}</span><span>· ${kayAd(s.kaynak)}</span></div></div>
     <div class="s-side">${sBadge(s)}${fin?(fs?'<b class="small muted">Ücretsiz</b>':`<b>${TL(s.durum==='odendi'?s.odeme.tahsilat:s.ucret)}</b>`):''}</div>
     ${act?`<div class="s-act">${act}</div>`:''}
@@ -1289,7 +1291,7 @@ function dFiltre(list,q){if(!q)return list;const ql=low(q),qd=digits(q);
 function hl(t,q){if(!q||q.length<2)return esc(t);const i=low(t).indexOf(low(q));if(i<0)return esc(t);return esc(t.slice(0,i))+'<mark>'+esc(t.slice(i,i+q.length))+'</mark>'+esc(t.slice(i+q.length))}
 // Psikolog telefon görme izni kapalıyken bile kendi getirdiği danışanların numarasını görür
 const telGorur=(d,u)=>!u||u.telGor||d.sahipUzmanId===u.id||S.seanslar.some(s=>s.danisanId===d.id&&s.uzmanId===u.id&&s.kaynak==='kendi');
-function dRows(list,q,act,maskTel){return list.map(d=>`<button class="row t-${TK[d.tur]}" data-act="${act}" data-id="${d.id}"><span class="av">${ini(d.ad)}</span><span style="min-width:0"><span class="nm">${kvkkBas(d)}${hl(d.ad,q)}${d.firmaId?`<span class="badge b-firma">${esc(F(d.firmaId).ad)}</span>`:''}</span><span class="mt">${maskTel&&!telGorur(d,maskTel)?'Telefon gizli':esc(d.tel)} · ${d.tur?d.tur+' · ':''}${esc(B(d.subeId).ad)}</span></span><span class="cnt">${toplamSeans(d)}<small>seans</small></span></button>`).join('')}
+function dRows(list,q,act,maskTel){return list.map(d=>`<button class="row t-${TK[d.tur]}" data-act="${act}" data-id="${d.id}"><span class="av">${ini(d.ad)}</span><span style="min-width:0"><span class="nm"><span class="ad-n">${kvkkBas(d)}${hl(d.ad,q)}</span>${d.firmaId?`<span class="badge b-firma">${esc(F(d.firmaId).ad)}</span>`:''}</span><span class="mt">${maskTel&&!telGorur(d,maskTel)?'Telefon gizli':esc(d.tel)} · ${d.tur?d.tur+' · ':''}${esc(B(d.subeId).ad)}</span></span><span class="cnt">${toplamSeans(d)}<small>seans</small></span></button>`).join('')}
 function dListHTML(){const q=UI.dq||'';let list=sorted();if(UI.dk!=='tum')list=list.filter(d=>d.subeId===UI.subeId);list=dFiltre(list,q);
   const per=50,pages=Math.max(1,Math.ceil(list.length/per));UI.dp=Math.min(UI.dp||0,pages-1);const st=UI.dp*per;
   if(!list.length)return`<div class="empty"><b>Sonuç bulunamadı</b>“${esc(q)}” ile eşleşen danışan yok. Yeni randevu formundan kayıt oluşturabilirsiniz.</div>`;
