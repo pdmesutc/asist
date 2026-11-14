@@ -989,7 +989,7 @@ function render(){
 const ROL_AD={yonetici:'Yönetici',asistan:'Asistan',psikolog:'Psikolog'};
 const EPOSTA_RE=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function vLogin(){
-  const demo=[['yonetici',S.ayar.yonetici.email,'Yönetici']].concat(S.subeler.filter(b=>b.asistan).map(b=>['asistan',b.asistan.email,b.ad+' asistanı'])).concat(S.uzmanlar.filter(u=>u.aktif).slice(0,3).map(u=>['psikolog',u.email,u.ad]));
+  const demo=[['yonetici',(S.ayar.yonetici||{}).email||'','Yönetici']].concat(S.subeler.filter(b=>b.asistan).map(b=>['asistan',b.asistan.email,b.ad+' asistanı'])).concat(S.uzmanlar.filter(u=>u.aktif).slice(0,3).map(u=>['psikolog',u.email,u.ad]));
   return`<div class="auth">
   <aside class="auth-side"><div class="auth-side-in">${LOGO("full",40)}
     <div><h2 class="auth-hl no-tc">Merkezinizin günlük işleri, tek ekranda.</h2>
@@ -1012,9 +1012,11 @@ function hesapBul(rol,k){k=low(String(k||'').trim());if(!k)return null;
   if(rol==='yonetici'){const y=S.ayar.yonetici;return low(y.email)===k?{rol,ad:'Merkez Yönetim',obj:y}:null}
   if(rol==='asistan'){const b=S.subeler.find(b=>b.asistan&&low(b.asistan.email)===k);return b?{rol,subeId:b.id,ad:b.ad+' Şubesi',obj:b.asistan}:null}
   const u=S.uzmanlar.find(u=>low(u.email)===k);return u?{rol,uzmanId:u.id,ad:u.ad,obj:u,pasif:!u.aktif}:null}
-function aktifHesap(){if(UI.rol==='yonetici'||UI.gozlem)return{obj:S.ayar.yonetici,ad:'Merkez Yönetim',kul:S.ayar.yonetici.email,rol:'Yönetici'};
-  if(UI.rol==='asistan'){const b=B(UI.subeId);return{obj:b.asistan,ad:b.ad+' Şubesi',kul:b.asistan.email,rol:'Asistan'}}
-  const u=U(UI.uzmanId);return{obj:u,ad:u.ad,kul:u.email,rol:'Psikolog'}}
+// Sunucuda hesaplar ayrı tabloda durur; şube kaydında asistan bilgisi olmayabilir (ör. veri aktarımıyla gelen şubeler)
+function aktifHesap(){const e=(SUNUCU&&UI.hesap&&UI.hesap.email)||'';
+  if(UI.rol==='yonetici'||UI.gozlem){const y=S.ayar.yonetici||{};return{obj:y,ad:'Merkez Yönetim',kul:y.email||e,rol:'Yönetici'}}
+  if(UI.rol==='asistan'){const b=B(UI.subeId)||{};const a=b.asistan||{};return{obj:a,ad:(b.ad||'')+' Şubesi',kul:a.email||e,rol:'Asistan'}}
+  const u=U(UI.uzmanId)||{};return{obj:u,ad:u.ad||'',kul:u.email||e,rol:'Psikolog'}}
 function kullaniciCakisma(k,haric,rol){k=low(String(k||'').trim());if(!k)return'';
   if(rol==='asistan'){const b=S.subeler.find(b=>b.asistan&&b.asistan!==haric&&low(b.asistan.email)===k);return b?`${b.ad} şubesi asistan hesabında`:''}
   if(rol==='psikolog'){const u=S.uzmanlar.find(u=>u!==haric&&low(u.email)===k);return u?`${u.ad} hesabında`:''}return''}
@@ -1865,7 +1867,7 @@ const A={
     S={v:S.v,...v,masraflar:[],firmalar:v.firmalar||[],fiyat:S.fiyat,ayar:S.ayar,netgsm:S.netgsm,sablon:S.sablon,smsLog:[],kaynakDosya:`${UI.aktarim.ad} · ${new Date().toLocaleString('tr-TR')}`};
     const oz=UI.aktarim.ozet;UI.aktarim=null;UI.subeId=S.subeler[0].id;UI.uzmanId=(S.uzmanlar.find(u=>u.aktif)||S.uzmanlar[0]).id;UI.ySube=null;UI.dq='';UI.dp=0;
     commit();toast(`${oz.seans.toLocaleString('tr-TR')} randevu ve ${oz.danisan.toLocaleString('tr-TR')} danışan aktarıldı.`);
-    sheet('Aktarım tamamlandı',`<p style="margin:0">Asistanlar aşağıdaki e-postalarla giriş yapabilir. Şifreleri Şubeler sayfasından değiştirmenizi öneririm.</p><div class="hist">${S.subeler.map(b=>`<div><b class="small">${esc(b.ad)}</b><span class="small">${esc(b.asistan.email)}</span><span class="small muted">${b.asistan.sifre==='demo1234'?'şifre: demo1234':'mevcut şifre'}</span></div>`).join('')}</div>
+    sheet('Aktarım tamamlandı',`<p style="margin:0">Asistanlar aşağıdaki e-postalarla giriş yapabilir. Şifreleri Şubeler sayfasından değiştirmenizi öneririm.</p><div class="hist">${S.subeler.map(b=>`<div><b class="small">${esc(b.ad)}</b><span class="small">${esc((b.asistan||{}).email||'—')}</span><span class="small muted">${(b.asistan||{}).sifre==='demo1234'?'şifre: demo1234':'mevcut şifre'}</span></div>`).join('')}</div>
       <p class="small muted" style="margin:0">Psikologların giriş yapabilmesi için Uzmanlar sayfasından her birine e-posta ve şifre tanımlayın.</p>`,`<button class="btn primary" data-act="kapat">Tamam</button>`)},
 
   ySube(d){UI.ySube=d.v;render()},
