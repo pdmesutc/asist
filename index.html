@@ -1085,10 +1085,12 @@ function vTakvim(){
   </tbody></table></div>`}`}
 function takvimHucre(t,h,r,day){
   // Online odada aynı saatte birden fazla seans olabilir: hepsi alt alta, altında "+" ile yenisi eklenir
-  if(onlineOda(r)){const l=day.filter(x=>x.saat===h&&x.odaId===r.id);const pastCell=t<TODAY||(t===TODAY&&parseInt(h)<nowH());
+  // Fiziksel odada da (birleştirilmiş eski odalardan gelen) geçmiş üst üste seanslar kaybolmasın diye hepsi gösterilir; "+ ekle" yalnızca online odada
+  const l=day.filter(x=>x.saat===h&&x.odaId===r.id);const onl=onlineOda(r);
+  if(onl||l.length>1){const pastCell=!onl||t<TODAY||(t===TODAY&&parseInt(h)<nowH());
     if(!l.length)return pastCell?`<td><div class="cell closed" aria-hidden="true"></div></td>`:`<td><button class="cell empty" data-act="bosHucre" data-t="${t}" data-h="${h}" data-o="${r.id}" aria-label="${h} ${esc(r.ad)} boş, randevu oluştur">+</button></td>`;
     return`<td><div class="cell-cok">${l.map(s=>{const d=D(s.danisanId),u=U(s.uzmanId);return`<button class="cell full t-${TK[s.tur]} ${s.durum==='odendi'?'paid':''}" data-act="seansDetay" data-id="${s.id}" aria-label="${h} ${esc(r.ad)}: ${esc(d.ad)}, ${esc(u.ad)}"><b class="genis">${esc(d.ad)}</b><small class="genis">${esc(u.ad.replace(/^(Uzm\. )?Psk\. /,''))}</small><b class="kisa">${ini(d.ad)}</b><small class="kisa">${ini(u.ad)}</small></button>`}).join('')}
-      ${l.length>1?`<span class="cell-say">${l.length} online seans</span>`:''}${pastCell?'':`<button class="cell-ekle" data-act="bosHucre" data-t="${t}" data-h="${h}" data-o="${r.id}" aria-label="${h} ${esc(r.ad)}: bir online seans daha ekle">+ ekle</button>`}</div></td>`}
+      ${l.length>1?`<span class="cell-say">${l.length} ${onl?'online ':''}seans</span>`:''}${pastCell?'':`<button class="cell-ekle" data-act="bosHucre" data-t="${t}" data-h="${h}" data-o="${r.id}" aria-label="${h} ${esc(r.ad)}: bir online seans daha ekle">+ ekle</button>`}</div></td>`}
   {const s=day.find(x=>x.saat===h&&x.odaId===r.id);
     if(s){const d=D(s.danisanId),u=U(s.uzmanId);return`<td><button class="cell full t-${TK[s.tur]} ${s.durum==='odendi'?'paid':''}" data-act="seansDetay" data-id="${s.id}" aria-label="${h} ${esc(r.ad)}: ${esc(d.ad)}, ${esc(u.ad)}"><b class="genis">${esc(d.ad)}</b><small class="genis">${esc(u.ad.replace(/^(Uzm\. )?Psk\. /,''))}</small><b class="kisa">${ini(d.ad)}</b><small class="kisa">${ini(u.ad)}</small></button></td>`}
     const pastCell=t<TODAY||(t===TODAY&&parseInt(h)<nowH());
