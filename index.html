@@ -1586,22 +1586,34 @@ function aktarimHazirla(text){
   const odaMap=new Map();K.forEach(o=>{if(!odaMap.has(o.oda_uuid))odaMap.set(o.oda_uuid,{id:'r'+o.oda_uuid.slice(0,8),subeId:subeId.get(o.lokasyon_uuid),ad:isimDuzelt(o.T_SecilenOda)||'Oda',tur:odaTurTahmin(o.T_SecilenOda)})});
   const odalar=[...odaMap.values()];
   // uzmanlar (aynı isimli kayıtlar birleştirilir)
-  // Kaynak: firma bağlantılı randevu → firma; psikoloğun kendi açtığı randevu (isPskCreate) → kendi danışanı; diğerleri → ofis yönlendirmesi
-  const kaynakOf=o=>(o.firmaUUID||'').trim()?'firma':o.isPskCreate==='1'?'kendi':'yonlendirme';
+  // Kaynak (ofis / kendi / firma). Ofiste kural: kendi danışanında ofis payı %30, ofis danışanında %50 (eskiden %40).
+  //  1) firma bağlantılı randevu → firma
+  //  2) ödemesi girilmiş seans: ofise kalan pay %35'in altındaysa kendi, değilse ofis
+  //  3) ödemesiz (iptal, ileri tarih): aynı danışanın aynı uzmanla ödenmiş seanslarına göre
+  //  4) psikoloğun kendisinin açtığı randevu (isPskCreate) → kendi
+  //  5) uzmanın ödenmiş seanslarının %80'i kendi ise → kendi; aksi halde ofis
   const ofisYuzde=o=>{const a=sayi(o.p_AlinanOdeme),f=sayi(o.p_OfiseKalan);return a>0&&f!=null?Math.round(f/a*100):null};
   const enCok=m=>{let k=null,n=0;m.forEach((v,x)=>{if(v>n){n=v;k=x}});return k};
+  const firmaMi=o=>!!(o.firmaUUID||'').trim(),uzKey=o=>low(isimDuzelt(o.T_SecilenPsk)||'İsimsiz uzman');
+  const ciftS=new Map(),uzS=new Map();K.forEach(o=>{o._of=ofisYuzde(o);if(o._of==null||firmaMi(o))return;const k=o._of<35?'kendi':'yonlendirme';
+    const c=o.danisan_uuid+'|'+uzKey(o);const a=ciftS.get(c)||{kendi:0,yonlendirme:0};a[k]++;ciftS.set(c,a);const b=uzS.get(uzKey(o))||{kendi:0,yonlendirme:0};b[k]++;uzS.set(uzKey(o),b)});
+  const kaynakOf=o=>{if(o._k)return o._k;let k;if(firmaMi(o))k='firma';else if(o._of!=null)k=o._of<35?'kendi':'yonlendirme';
+    else{const c=ciftS.get(o.danisan_uuid+'|'+uzKey(o));if(c&&c.kendi!==c.yonlendirme)k=c.kendi>c.yonlendirme?'kendi':'yonlendirme';
+      else if(o.isPskCreate==='1')k='kendi';else{const u=uzS.get(uzKey(o));k=u&&u.kendi>=(u.kendi+u.yonlendirme)*.8?'kendi':'yonlendirme'}}
+    return o._k=k};
   const uzAd=new Map(),uzUuid=new Map(),birlesen=new Set();
   K.forEach(o=>{const ad=isimDuzelt(o.T_SecilenPsk)||'İsimsiz uzman';const key=low(ad);
     if(!uzAd.has(key))uzAd.set(key,{id:'u'+o.psk_uuid.slice(0,8),ad,uuids:new Set(),subeIds:new Set(),son:'',yuzde:50,tel:'',sms:true,oK:new Map(),oY:new Map(),n:{kendi:0,yonlendirme:0,firma:0}});
     const u=uzAd.get(key);u.uuids.add(o.psk_uuid);u.subeIds.add(subeId.get(o.lokasyon_uuid));u.son=o._t;const y=sayi(o.psk_default_yuzde);if(y!=null)u.yuzde=y;if(o.psk_contac)u.tel=normTel(o.psk_contac);u.sms=o.psk_sms_service!=='0';
-    const kk=kaynakOf(o);if(o.isIptal!=='1')u.n[kk]++;const oy=ofisYuzde(o);if(oy!=null&&kk!=='firma'){const m=kk==='kendi'?u.oK:u.oY;m.set(oy,(m.get(oy)||0)+1)}});
+    const kk=kaynakOf(o);if(o.isIptal!=='1')u.n[kk]++;const oy=ofisYuzde(o);if(oy!=null&&kk!=='firma'){const m=kk==='kendi'?u.oK:u.oY;m.set(oy,(m.get(oy)||0)+1);if(kk==='kendi')u.sK=oy;else u.sY=oy}});
   const uuidAd=new Map();K.forEach(o=>{const a=isimDuzelt(o.T_SecilenPsk);if(!uuidAd.has(o.psk_uuid))uuidAd.set(o.psk_uuid,new Set());uuidAd.get(o.psk_uuid).add(low(a))});
   uzAd.forEach(u=>{if(u.uuids.size>1)birlesen.add(u.ad);u.uuids.forEach(x=>uzUuid.set(x,u.id))});
   const sinir=addDays(TODAY,-180);
   const uzmanlar=[...uzAd.values()].map(u=>{const musait={};[...u.subeIds].forEach(sid=>{const b=subeler.find(x=>x.id===sid);musait[sid]={};for(let g=1;g<=6;g++)musait[sid][g]=SAATLER.filter(h=>h>=b.acilis&&h<b.kapanis)});
     // Sistemde aynı adla kayıtlı uzman varsa kimliği ve kendi ayarları (giriş e-postası, online link, SMS, telefon izni) korunur
     const es=S.uzmanlar.find(x=>low(isimDuzelt(x.ad))===low(u.ad));
-    return{id:es?es.id:u.id,ad:u.ad,tel:u.tel||(es&&es.tel)||'',email:es?es.email||'':'',sifre:'',alanlar:es&&es.alanlar?es.alanlar:[...TURLER],subeIds:[...u.subeIds],oranKendi:enCok(u.oK)??u.yuzde,oranYonlendirme:enCok(u.oY)??u.yuzde,telGor:es?!!es.telGor:!SUNUCU,sms:es?!!es.sms:u.sms,aktif:u.son>=sinir,musait,izinler:[],...(es&&es.onlineLink?{onlineLink:es.onlineLink}:{}),...(es&&es.dogum?{dogum:es.dogum}:{})}});
+    return{id:es?es.id:u.id,ad:u.ad,tel:u.tel||(es&&es.tel)||'',email:es?es.email||'':'',sifre:'',alanlar:es&&es.alanlar?es.alanlar:[...TURLER],subeIds:[...u.subeIds],// yeni randevularda geçerli oran: en son ödenmiş seanstaki pay (güncel anlaşma); yoksa ofis kuralı %30 / %50
+    oranKendi:u.sK!=null&&u.sK>=15&&u.sK<35?u.sK:30,oranYonlendirme:u.sY!=null&&u.sY>=35&&u.sY<=60?u.sY:50,telGor:es?!!es.telGor:!SUNUCU,sms:es?!!es.sms:u.sms,aktif:u.son>=sinir,musait,izinler:[],...(es&&es.onlineLink?{onlineLink:es.onlineLink}:{}),...(es&&es.dogum?{dogum:es.dogum}:{})}});
   // eşleşen uzmanın kimliği değiştiyse seans/danışan bağlantıları da yeni kimliğe gitsin
   uzmanlar.forEach(x=>{const e=uzAd.get(low(x.ad));if(e&&e.id!==x.id){e.uuids.forEach(k=>uzUuid.set(k,x.id))}});
   // firmalar (dosyada firma adı yok; "Firma 1 (eski sistem)" gibi adlandırılır, Firmalar sayfasından düzeltilir)
@@ -1638,16 +1650,17 @@ function aktarimHazirla(text){
   const uzmanOdemeleri=Object.entries(hs).map(([k,v],i)=>{const[u,sb,ay]=k.split('|');return{id:'oa'+i,uzmanId:u,subeId:sb,ay,tutar:v,tarih:ay+'-28',aktarim:1}});
   const ozet={satir:R.length,hatali,seans:seanslar.length,iptal:seanslar.filter(x=>x.durum==='iptal').length,odendi:seanslar.filter(x=>x.durum==='odendi').length,bekliyor:seanslar.filter(x=>x.durum==='bekliyor').length,
     danisan:danisanlar.length,telHatali,kaynak:{kendi:seanslar.filter(x=>x.kaynak==='kendi'&&x.durum!=='iptal').length,yonlendirme:seanslar.filter(x=>x.kaynak==='yonlendirme'&&x.durum!=='iptal').length,firma:seanslar.filter(x=>x.kaynak==='firma'&&x.durum!=='iptal').length},
-    firma:firmalar.length,kendiDanisan:danisanlar.filter(d=>d.sahipUzmanId).length,uzTablo:[...uzAd.values()].map(u=>({id:(uzmanlar.find(x=>low(x.ad)===low(u.ad))||{}).id,ad:u.ad,n:u.n,oK:enCok(u.oK),oY:enCok(u.oY)})).sort((a,b)=>(b.n.kendi+b.n.yonlendirme+b.n.firma)-(a.n.kendi+a.n.yonlendirme+a.n.firma)),uzman:uzmanlar.length,aktifUzman:uzmanlar.filter(u=>u.aktif).length,birlesen:[...birlesen],sube:subeler.map(b=>b.ad),oda:odalar.length,
+    firma:firmalar.length,kendiDanisan:danisanlar.filter(d=>d.sahipUzmanId).length,uzTablo:[...uzAd.values()].map(u=>{const z=uzmanlar.find(x=>low(x.ad)===low(u.ad))||{};return{id:z.id,ad:u.ad,n:u.n,oK:z.oranKendi,oY:z.oranYonlendirme}}).sort((a,b)=>(b.n.kendi+b.n.yonlendirme+b.n.firma)-(a.n.kendi+a.n.yonlendirme+a.n.firma)),uzman:uzmanlar.length,aktifUzman:uzmanlar.filter(u=>u.aktif).length,birlesen:[...birlesen],sube:subeler.map(b=>b.ad),oda:odalar.length,
     ilk:K.length?K[0]._t:'',son:K.length?K[K.length-1]._t:'',ciro:seanslar.reduce((a,x)=>a+(x.odeme?x.odeme.tahsilat:0),0),gecmisOdemesiz};
   return{veri:{subeler,odalar,uzmanlar,danisanlar,seanslar,uzmanOdemeleri,firmalar},ozet}}
-// "Hepsi kendi" işaretlenen psikologlar: firma dışındaki seansları kendi danışanı, danışanları o psikoloğa bağlı
-function aktarimSon(A_){const v=A_.veri,T=A_.tumKendi;if(!T||!T.size)return v;
-  const seanslar=v.seanslar.map(x=>T.has(x.uzmanId)&&x.kaynak==='yonlendirme'?{...x,kaynak:'kendi'}:x);
+// Ön izlemede uzman bazında seçilen "Hepsi ofis" / "Hepsi kendi" uygulanır; danışanın sahibi (kendi danışanı olduğu uzman) son hale göre belirlenir
+function aktarimSon(A_){const v=A_.veri,M=A_.uzMod||new Map();
+  const seanslar=v.seanslar.map(x=>{const m=M.get(x.uzmanId);return m&&x.kaynak!=='firma'&&x.kaynak!==m?{...x,kaynak:m}:x});
   const say=new Map();seanslar.forEach(x=>{if(x.kaynak==='kendi'){const m=say.get(x.danisanId)||new Map();m.set(x.uzmanId,(m.get(x.uzmanId)||0)+1);say.set(x.danisanId,m)}});
-  const danisanlar=v.danisanlar.map(d=>{if(d.sahipUzmanId||!say.has(d.id))return d;let k=null,n=0;say.get(d.id).forEach((c,u)=>{if(c>n){n=c;k=u}});return{...d,sahipUzmanId:k}});
+  const danisanlar=v.danisanlar.map(d=>{let k=null,n=0;(say.get(d.id)||new Map()).forEach((c,u)=>{if(c>n){n=c;k=u}});return d.sahipUzmanId===k?d:{...d,sahipUzmanId:k}});
   return{...v,seanslar,danisanlar}}
-function vAktar(){const A_=UI.aktarim;const o=A_&&A_.ozet;
+function aktarimSayim(v){const k={kendi:0,yonlendirme:0,firma:0};v.seanslar.forEach(x=>{if(x.durum!=='iptal'&&k[x.kaynak]!=null)k[x.kaynak]++});return{kaynak:k,kendiDanisan:v.danisanlar.filter(d=>d.sahipUzmanId).length}}
+function vAktar(){const A_=UI.aktarim;const o=A_&&A_.ozet;const son=o&&o.kaynak?aktarimSayim(aktarimSon(A_)):null;const M=(A_&&A_.uzMod)||new Map();
   return`<div class="page-head"><div><h1>Veri Aktarımı</h1><p>Eski sistemden dışa aktarılan randevu dosyasını (CSV) yükleyin.</p></div></div>
   <div class="cmsg" style="background:var(--surface);border:1px solid var(--line);color:var(--ink);font-weight:500"><span>${ic('shield')} ${SUNUCU?'<b>Dosya bu cihazda okunur, kayıtlar yalnızca kendi sunucunuza şifreli olarak gönderilir.</b> Başka hiçbir yere (GitHub, üçüncü taraf) gitmez. TC kimlik ve fatura bilgileri aktarılmaz. Aktarım hiçbir SMS göndermez.':'<b>Veriler yalnızca bu cihazda kalır.</b> Dosya tarayıcınızın içinde okunur ve bu tarayıcının deposunda saklanır; hiçbir sunucuya, GitHub\'a ya da başka bir yere gönderilmez. Başka bir bilgisayarda görmek için dosyayı orada da yüklemeniz gerekir.'}</span></div>
   <div class="card"><h2>1. Dosyayı seçin</h2>
@@ -1662,14 +1675,14 @@ function vAktar(){const A_=UI.aktarim;const o=A_&&A_.ozet;
     <dl class="kv"><dt>Şubeler</dt><dd>${o.sube.map(esc).join(', ')} · ${o.oda} oda</dd>
     ${o.birlesen.length?`<dt>Birleştirilen</dt><dd>${o.birlesen.map(esc).join(', ')} (birden fazla kaydı vardı, tek uzman yapıldı)</dd>`:''}
     ${o.hatali?`<dt>Atlanan</dt><dd>${o.hatali} satırın tarihi/saati okunamadı</dd>`:''}
-    ${o.kaynak?`<dt>Kaynak</dt><dd>${o.kaynak.yonlendirme.toLocaleString('tr-TR')} ofis · ${o.kaynak.kendi.toLocaleString('tr-TR')} kendi danışanı · ${o.kaynak.firma.toLocaleString('tr-TR')} firma seansı (iptaller hariç)</dd>
-    <dt>Kendi danışanı</dt><dd>${o.kendiDanisan.toLocaleString('tr-TR')} danışan bir psikoloğun kendi danışanı olarak işaretlenir; o psikolog bu kişilerin telefonunu görür</dd>
+    ${son?`<dt>Kaynak</dt><dd>${son.kaynak.yonlendirme.toLocaleString('tr-TR')} ofis · ${son.kaynak.kendi.toLocaleString('tr-TR')} kendi danışanı · ${son.kaynak.firma.toLocaleString('tr-TR')} firma seansı (iptaller hariç)</dd>
+    <dt>Kendi danışanı</dt><dd>${son.kendiDanisan.toLocaleString('tr-TR')} danışan bir psikoloğun kendi danışanı olarak işaretlenir; o psikolog bu kişilerin telefonunu görür</dd>
     ${o.firma?`<dt>Firma</dt><dd>${o.firma} firma (dosyada firma adı yok; “Firma 1 (eski sistem)” gibi adlandırılır, Firmalar sayfasından düzeltin)</dd>`:''}`:''}</dl>
-    ${o.uzTablo?`<details ${A_.tumKendi?'open':''}><summary class="small" style="cursor:pointer;font-weight:600">Psikolog bazında kontrol tablosu</summary><div class="tw" style="margin-top:8px"><table class="tbl"><thead><tr><th title="Tüm danışanları kendi danışanı say">Hepsi kendi</th><th>Psikolog</th><th class="r">Ofis</th><th class="r">Kendi</th><th class="r">Firma</th><th class="r">Ofis payı (ofis / kendi)</th></tr></thead><tbody>
-      ${o.uzTablo.map(u=>`<tr><td><input type="checkbox" style="width:20px;height:20px;accent-color:var(--accent)" data-chg="akTumKendi" data-id="${u.id}" ${(A_.tumKendi||new Set()).has(u.id)?'checked':''} aria-label="${esc(u.ad)}: tüm danışanları kendi danışanı"></td><td>${esc(u.ad)}</td><td class="r">${u.n.yonlendirme}</td><td class="r">${u.n.kendi}</td><td class="r">${u.n.firma}</td><td class="r">${u.oY!=null?'%'+u.oY:'—'} / ${u.oK!=null?'%'+u.oK:'—'}</td></tr>`).join('')}</tbody></table></div>
-      <span class="small muted">“Kendi” sütunu, eski sistemde randevuyu psikoloğun kendisinin açtığı seansları gösterir. Tanıdığınız birkaç psikologda doğru görünüyor mu, kontrol edin.
-      Ofiste yalnızca oda kullanan, bütün danışanları kendisine ait olan psikologlar için “Hepsi kendi”yi işaretleyin: o psikoloğun firma dışındaki tüm seansları kendi danışanı sayılır.</span>
-      ${A_.tumKendi&&A_.tumKendi.size?`<div class="small" style="font-weight:600">${A_.tumKendi.size} psikolog için tüm seanslar kendi danışanı olarak aktarılacak.</div>`:''}</details>`:''}
+    ${o.uzTablo?`<details ${A_.uzMod?'open':''}><summary class="small" style="cursor:pointer;font-weight:600">Psikolog bazında kontrol tablosu</summary><div class="tw" style="margin-top:8px"><table class="tbl"><thead><tr><th>Kaynak</th><th>Psikolog</th><th class="r">Ofis</th><th class="r">Kendi</th><th class="r">Firma</th><th class="r">Yeni randevuda ofis payı (ofis / kendi)</th></tr></thead><tbody>
+      ${o.uzTablo.map(u=>`<tr><td><select data-chg="akUzMod" data-id="${u.id}" aria-label="${esc(u.ad)}: kaynak" style="min-height:36px;padding:4px 8px">${[['','Otomatik'],['yonlendirme','Hepsi ofis'],['kendi','Hepsi kendi']].map(([k,l])=>`<option value="${k}" ${(M.get(u.id)||'')===k?'selected':''}>${l}</option>`).join('')}</select></td><td>${esc(u.ad)}</td><td class="r">${u.n.yonlendirme}</td><td class="r">${u.n.kendi}</td><td class="r">${u.n.firma}</td><td class="r">${u.oY!=null?'%'+u.oY:'—'} / ${u.oK!=null?'%'+u.oK:'—'}</td></tr>`).join('')}</tbody></table></div>
+      <span class="small muted">Otomatik: ofise kalan pay %35'in altındaysa kendi danışanı (%30), üstündeyse ofis danışanı (%40–50). Ödemesi olmayan seanslarda aynı danışanın o uzmanla diğer seanslarına bakılır. Sayılar otomatik sonuçtur.
+      Bir uzmanın tüm seanslarını (firma hariç) tek kaynağa almak için “Hepsi ofis” veya “Hepsi kendi” seçin.</span>
+      ${M.size?`<div class="small" style="font-weight:600">${[...M.values()].filter(x=>x==='yonlendirme').length} uzman “Hepsi ofis”, ${[...M.values()].filter(x=>x==='kendi').length} uzman “Hepsi kendi” olarak aktarılacak.</div>`:''}</details>`:''}
     <div class="small muted" style="display:flex;flex-direction:column;gap:4px"><span>• Geçmiş ve iptal edilmemiş tüm seanslar <b>ödendi</b> olarak, eski sistemdeki tutar ve ofis payıyla aktarılır${o.gecmisOdemesiz?` (tutarı girilmemiş ${o.gecmisOdemesiz.toLocaleString('tr-TR')} seans ₺0 olarak)`:''}.</span><span>• Seans türü boş bırakılır; kaynak (ofis / kendi / firma) dosyadan alınır.</span><span>• Önceki ayların uzman hak edişleri ödenmiş sayılır; bu ayınki Şube Kasası'ndan işaretlenir.</span><span>• İptaller iptal olarak kalır, iptal sebebi seans notuna yazılır.</span><span>• ${SUNUCU?'Giriş hesapları aktarımdan sonra Hesaplar → Hesap ekle → “Hesabı olmayan herkese toplu aç” ile açılır.':'Psikologların e-posta ve şifresi yoktur; giriş yapabilmeleri için Uzmanlar sayfasından tanımlanmalıdır.'}</span></div></div>
   ${SUNUCU?`<div class="card"><h2>3. Sunucuya aktarın</h2><span class="small">Sunucudaki <b>tüm mevcut iş kayıtları</b> (demo danışanlar, seanslar, uzmanlar, şubeler, odalar, giderler, kurumsal firmalar ve SMS kayıtları) silinip yerine dosyadaki veriler konur. Fiyatlar, KDV, SMS ayarları ve şablonları, giriş hesapları ve SMS kapalı/açık durumu <b>korunur</b>. Aynı adlı şube ve uzmanların kimliği korunur; asistan hesapları ve şube şablonları bağlı kalır.</span>
     <span class="small muted">Kayıtlar önce sunucuda ayrı bir bekleme alanına yüklenir, sayılar tutarsa tek seferde yer değiştirir. Yükleme yarıda kalırsa mevcut verilere dokunulmaz. Başlamadan önce Plesk'ten tam yedek almanızı öneririm.</span>
@@ -2243,7 +2256,7 @@ Object.assign(A,{
       API.cagir('aktarim',{adim:'iptal'}).catch(()=>{})}
     finally{SENK.dinle()}},
   hsAc(){kapat();A.go({v:'hesaplar'})},
-  akTumKendi(d,el){const T=UI.aktarim.tumKendi=UI.aktarim.tumKendi||new Set();if(el.checked)T.add(d.id);else T.delete(d.id);const sy=scrollY;render();scrollTo(0,sy)},
+  akUzMod(d,el){const M=UI.aktarim.uzMod=UI.aktarim.uzMod||new Map();if(el.value)M.set(d.id,el.value);else M.delete(d.id);const sy=scrollY;render();scrollTo(0,sy)},
   hsTopluKopya(){navigator.clipboard.writeText(A._htMetin||'').then(()=>toast('Liste kopyalandı.'),()=>toast('Kopyalanamadı; tabloyu elle seçin.',1))}
 });
 /* ============ Olay yönetimi ============ */
