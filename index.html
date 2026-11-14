@@ -1896,7 +1896,19 @@ const A={
   smsTarih(d,el){UI.smsT=el.value;UI.smsSel=null;render()},
   smsTum(d,el){const t=UI.smsT||addDays(TODAY,1);const list=S.seanslar.filter(s=>s.subeId===UI.subeId&&s.tarih===t&&s.durum==='bekliyor');UI.smsSel.ids=new Set(el.checked?list.map(s=>s.id):[]);render()},
   smsSec(d,el){el.checked?UI.smsSel.ids.add(d.id):UI.smsSel.ids.delete(d.id);render()},
-  smsGonder(){const t=UI.smsT||addDays(TODAY,1);const list=S.seanslar.filter(s=>UI.smsSel.ids.has(s.id)&&s.tarih===t);const uzDa=chk('smsUz');let n=0;
+  smsGonder(){const t=UI.smsT||addDays(TODAY,1);const list=S.seanslar.filter(s=>UI.smsSel.ids.has(s.id)&&s.tarih===t);const uzDa=chk('smsUz');
+    if(!list.length){toast('Önce seans seçin.',1);return}
+    const acik=list.filter(smsAcik),kapali=list.length-acik.length;const nD=acik.reduce((a,s)=>a+alicilar(D(s.danisanId)).length,0);
+    const nU=uzDa?new Set(acik.filter(s=>{const u=U(s.uzmanId);return u.tel}).map(s=>s.id)).size:0;
+    if(!nD&&!nU){toast('Seçili seanslarda SMS gidecek kimse yok.',1);return}
+    const ornek=doldur(sablonAl(acik[0].subeId,'d_hatirlatma'),acik[0]);const parca=ornek.length<=155?1:Math.ceil(ornek.length/150);
+    A._smsTaslak={t,ids:list.map(s=>s.id),uzDa};
+    sheet('Toplu SMS’i onaylayın',`${ozet([['Tarih',`<b>${tamTarih(t)}</b>`],['Seans',`${acik.length}${kapali?` <span class="muted">(${kapali} seans uzmanı için SMS kapalı, atlanacak)</span>`:''}`],
+        ['Danışanlara',`<b>${nD}</b> mesaj`],uzDa?['Uzmanlara',`<b>${nU}</b> mesaj`]:null,['Toplam',`<b>${nD+nU}</b> mesaj · yaklaşık ${(nD+nU)*parca} SMS kredisi`]])}
+      <div class="small muted">Danışana gidecek örnek mesaj:</div><div class="smsprev">${esc(ornek)}</div>
+      <p class="small muted" style="margin:0">Gönderilen mesajlar geri alınamaz.</p>`,
+      `<button class="btn" data-act="kapat">Vazgeç</button><button class="btn primary" data-act="smsGonderOnay">Onayla ve gönder</button>`)},
+  smsGonderOnay(){const y=A._smsTaslak;if(!y)return;A._smsTaslak=null;const list=S.seanslar.filter(s=>y.ids.includes(s.id));const uzDa=y.uzDa;let n=0;kapat();
     list.forEach(s=>{n+=smsAt('d_hatirlatma',s,alicilar(D(s.danisanId)));const u=U(s.uzmanId);if(uzDa&&u.sms&&u.tel)n+=smsAt('p_hatirlatma',s,[{ad:u.ad,tel:u.tel}])});const kapali=list.filter(s=>!smsAcik(s)).length;commit();toast(`${n} SMS ${S.netgsm.kod||S.netgsm.bagli?'gönderildi':'kaydedildi (simülasyon)'}${kapali?` · ${kapali} seans uzmanı için SMS kapalı olduğundan atlandı`:''}.`)},
   firmaSec(d,el){UI.fsec=el.value;render()},
   csv(){const blob=new Blob(['﻿'+csvMetni()],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${F(UI.fsec).ad.replace(/\W+/g,'_')}_${perRange()[0]}.csv`;document.body.appendChild(a);a.click();a.remove();toast('CSV hazırlandı. İndirme başlamazsa “Kopyala” ile Excel’e yapıştırın.')},
