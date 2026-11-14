@@ -1422,6 +1422,7 @@ function vSmsAyar(){const n=S.netgsm;UI.smsSube=S.subeler.some(b=>b.id===UI.smsS
   const kutu=([k,l])=>{const v=sablonAl(sb,k);return fld(l,`<textarea id="sb_${k}" data-in="sbSay" rows="3">${esc(v)}</textarea><span class="small muted" id="sbc_${k}">${smsKarakter(v)}</span>`)};
   return`<div class="page-head"><div><h1>SMS Merkezi</h1><p>NetGSM entegrasyonu ve otomatik mesaj şablonları</p></div></div>
   ${SUNUCU?'<div class="cmsg" id="smsMod" hidden></div>':''}
+  ${SUNUCU&&S.netgsm.bagli?`<div class="card" id="smsBakiye"><div class="card-h"><h2>Kalan SMS</h2><button class="btn sm" data-act="smsBakiye">Yenile</button></div><div id="smsBakiyeIc" class="small muted">Sorgulanıyor…</div></div>`:''}
   <div class="form-grid"><div class="card"><h2>NetGSM API</h2>${fld('Kullanıcı kodu',`<input id="n_kod" value="${esc(n.kod)}" placeholder="850xxxxxxx">`)}${fld('API şifresi',`<input id="n_sifre" type="password" autocomplete="new-password" value="${SUNUCU?'':esc(n.sifre)}" placeholder="${SUNUCU&&n.bagli?'Kayıtlı · değiştirmek için yazın':''}">`)}${fld('SMS başlığı (gönderici adı)',`<input id="n_baslik" value="${esc(n.baslik)}" maxlength="11">`)}
    <div class="small muted">${SUNUCU?(n.bagli?'NetGSM bağlı. Şifre yalnızca sunucuda, şifreli olarak saklanır; tarayıcıya gönderilmez.':'NetGSM bilgileri girilene kadar mesajlar gönderilmez, yalnızca kayıt altına alınır.'):'Gerçek gönderim için şifre sunucu tarafında saklanmalıdır. Bu demoda gönderimler kayıt altına alınır, operatöre iletilmez.'}</div>
    <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" data-act="netgsmTest">Bağlantıyı test et</button></div>
@@ -1632,12 +1633,21 @@ function ySubeSec(){UI.ySube=S.subeler.some(b=>b.id===UI.ySube)?UI.ySube:S.subel
 const VIEWS={gorusmeler:vGorusmeler,takvim:vTakvim,randevu:()=>vRandevu('asistan'),danisanlar:vDanisanlar,kasa:vKasa,giderler:vGiderler,sms:vSms,firma:vFirma,
   ozet:vOzet,aktar:vAktar,ykasa:()=>ySubeSec()+vKasa(),ygider:()=>ySubeSec()+vGiderler(),subeler:vSubeler,uzmanlar:vUzmanlar,fiyat:vFiyat,firmalar:vFirmalar,smsayar:vSmsAyar,
   ajanda:vAjanda,danisanlarim:vDanisanlarim,kendi:()=>vRandevu('psikolog'),hakedis:vHakedis,musaitlik:vMusaitlik};
-const AFTER={randevu:rInit,kendi:rInit,smsayar:()=>{if(!SUNUCU)return;API.cagir('sms-durum').then(o=>{const e=$('#smsMod');if(!e)return;e.hidden=false;
+function smsBakiyeCiz(){const e=$('#smsBakiyeIc');if(!e)return;e.className='small muted';e.textContent='Sorgulanıyor…';
+  API.cagir('sms-bakiye').then(o=>{const el=$('#smsBakiyeIc');if(!el)return;el.className='';
+    const p=o.paketler||[];const sms=p.filter(x=>/sms/i.test(x.ad)&&!/flash|otp|ses|mms/i.test(x.ad));const ana=sms.length?sms:p;
+    el.innerHTML=`<div class="stats">${ana.map(x=>`<div class="stat"><span class="k">${esc(x.ad)}</span><span class="v num">${Number(String(x.adet).replace(',','.')).toLocaleString('tr-TR')}</span></div>`).join('')||'<div class="stat"><span class="k">Paket</span><span class="v">—</span></div>'}
+      ${o.kredi!=null?`<div class="stat"><span class="k">Kredi (TL)</span><span class="v num">${esc(o.kredi)}</span></div>`:''}</div>
+      ${p.length>ana.length?`<div class="small muted" style="margin-top:6px">${p.filter(x=>!ana.includes(x)).map(x=>esc(x.ad)+': '+esc(x.adet)).join(' · ')}</div>`:''}
+      <div class="small muted" style="margin-top:6px">Son sorgu ${esc(o.zaman)} · NetGSM hesabındaki güncel bilgi</div>`})
+  .catch(x=>{const el=$('#smsBakiyeIc');if(el){el.className='small';el.style.color='var(--danger)';el.textContent=x.message}})}
+const AFTER={randevu:rInit,kendi:rInit,smsayar:()=>{if(!SUNUCU)return;smsBakiyeCiz();API.cagir('sms-durum').then(o=>{const e=$('#smsMod');if(!e)return;e.hidden=false;
   if(o.mod==='canli'){e.className='cmsg err';e.innerHTML='<span><b>Canlı mod:</b> mesajlar danışanlara gerçekten gönderilir.</span>'}
   else{e.className='cmsg ok';e.innerHTML=`<span><b>Test modu:</b> mesajlar ${o.izinli.length?'yalnızca şu numaralara gerçekten gider: '+o.izinli.map(esc).join(', ')+'. Diğerleri gönderilmeden kaydedilir.':'hiçbir numaraya gönderilmez, yalnızca kaydedilir.'}</span>`}}).catch(()=>{})}};
 
 /* ============ Aksiyonlar ============ */
 const A={
+  smsBakiye(){smsBakiyeCiz()},
   linkKaydet(){const v=val('ms_link').trim();if(v&&!/^https:\/\/\S+$/i.test(v)){toast('Link https:// ile başlamalı.',1);return}U(UI.uzmanId).onlineLink=v;commit();toast(v?'Online görüşme linkiniz kaydedildi.':'Online görüşme linki kaldırıldı.')},
   demoYukle(d,el){demoYukle(el)},
   kapat,
