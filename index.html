@@ -372,6 +372,10 @@ table.cal{border-collapse:separate;border-spacing:0;min-width:100%}
 .kvkk-yazi{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
 .kvkk-yazi b{font-weight:600}
 .kvkk-chk{margin-top:4px;font-weight:600}
+.ol-satir{display:grid;grid-template-columns:86px minmax(0,1fr) auto;gap:10px;align-items:start;padding:10px 14px;border-bottom:1px solid var(--line)}
+.ol-satir:last-child{border-bottom:0}.ol-satir.uyari{background:color-mix(in srgb,var(--warn) 9%,transparent)}.ol-satir.uyari b{color:var(--warn)}
+.ol-o{display:flex;flex-direction:column;min-width:0;gap:2px}.ol-o .small{overflow-wrap:anywhere}.ol-c{text-align:right;line-height:1.35}
+@media (max-width:640px){.ol-satir{grid-template-columns:62px minmax(0,1fr)}.ol-c{grid-column:2;text-align:left}}
 .cell-cok{display:flex;flex-direction:column;gap:3px}
 .cell-cok .cell{min-height:40px}
 .cell-say{font-size:.68rem;font-weight:700;color:var(--accent);text-align:center}
@@ -1014,7 +1018,7 @@ function vLogin(){
     <div class="seg auth-seg" role="radiogroup" aria-label="Panel">${[['asistan','Asistan'],['psikolog','Psikolog'],['yonetici','Yönetici']].map(([k,l])=>`<label><input type="radio" name="g_rol" value="${k}" ${k===(UI.girisRol||'asistan')?'checked':''} data-chg="girisRol">${l}</label>`).join('')}</div>
     <label class="field"><span>E-posta</span><input id="g_k" name="email" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" inputmode="email" placeholder="E-posta adresiniz"></label>
     <label class="field"><span>Şifre</span><div class="pw"><input id="g_s" name="password" type="password" autocomplete="current-password" placeholder="Şifreniz"><button type="button" class="pw-btn" data-act="sifreGoster" aria-label="Şifreyi göster">${ic('eye')}</button></div></label>
-    <div class="auth-row">${SUNUCU?'<span></span>':`<label class="chk"><input type="checkbox" id="g_hatirla" ${UI.hatirla?'checked':''}> Beni hatırla</label>`}<button type="button" class="linkbtn" data-act="sifreUnut">Şifremi unuttum</button></div>
+    <div class="auth-row">${SUNUCU?`<label class="chk" id="g_kalici_l" ${(UI.girisRol||'asistan')==='yonetici'?'hidden':''}><input type="checkbox" id="g_kalici"> Bu cihazda açık kalsın (7 gün)</label>`:`<label class="chk"><input type="checkbox" id="g_hatirla" ${UI.hatirla?'checked':''}> Beni hatırla</label>`}<button type="button" class="linkbtn" data-act="sifreUnut">Şifremi unuttum</button></div>
     <div id="g_hata" class="cmsg err" role="alert" hidden></div>
     <button type="submit" class="btn primary lg block" id="g_btn">Giriş Yap</button>
     ${SUNUCU||S.kaynakDosya?'':`<details class="auth-demo"><summary>Demo hesapları</summary><div class="auth-demo-in"><span class="small muted">Bu sürüm tanıtım amaçlıdır. Bir hesaba dokunun, bilgiler doldurulsun. Şifrelerin hepsi <b>demo1234</b>.</span>
@@ -1723,8 +1727,47 @@ function aktarimSon(A_){const v=A_.veri,M=A_.uzMod||new Map(),sinir=A_.bekleSini
   const danisanlar=v.danisanlar.map(d=>{let k=null,n=0;(say.get(d.id)||new Map()).forEach((c,u)=>{if(c>n){n=c;k=u}});return d.sahipUzmanId===k?d:{...d,sahipUzmanId:k}});
   return{...v,seanslar,danisanlar}}
 function aktarimSayim(v){const k={kendi:0,yonlendirme:0,firma:0};let bek=0,bekGecmis=0;v.seanslar.forEach(x=>{if(x.durum!=='iptal'&&k[x.kaynak]!=null)k[x.kaynak]++;if(x.durum==='bekliyor'){bek++;if(x.tarih<=TODAY)bekGecmis++}});return{kaynak:k,kendiDanisan:v.danisanlar.filter(d=>d.sahipUzmanId).length,bek,bekGecmis}}
+/* ---- Tüm verilerin yedeği: tek Excel dosyası (.xlsx), tarayıcıda hazırlanır ---- */
+const CRC_T=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+function crc32(b){let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=CRC_T[(c^b[i])&255]^(c>>>8);return(c^0xFFFFFFFF)>>>0}
+async function sikistir(b){if(typeof CompressionStream==='undefined')return null;try{const st=new Blob([b]).stream().pipeThrough(new CompressionStream('deflate-raw'));return new Uint8Array(await new Response(st).arrayBuffer())}catch(e){return null}}
+async function zipYap(dosyalar){const enc=new TextEncoder();const parcalar=[],merkez=[];let ofs=0;
+  for(const[ad,metin]of dosyalar){const ham=enc.encode(metin),adB=enc.encode(ad),crc=crc32(ham);const sk=await sikistir(ham);const veri=sk&&sk.length<ham.length?sk:ham,yontem=veri===ham?0:8;
+    const h=new DataView(new ArrayBuffer(30));h.setUint32(0,0x04034b50,true);h.setUint16(4,20,true);h.setUint16(6,0x0800,true);h.setUint16(8,yontem,true);h.setUint32(14,crc,true);h.setUint32(18,veri.length,true);h.setUint32(22,ham.length,true);h.setUint16(26,adB.length,true);
+    parcalar.push(new Uint8Array(h.buffer),adB,veri);
+    const m=new DataView(new ArrayBuffer(46));m.setUint32(0,0x02014b50,true);m.setUint16(4,20,true);m.setUint16(6,20,true);m.setUint16(8,0x0800,true);m.setUint16(10,yontem,true);m.setUint32(16,crc,true);m.setUint32(20,veri.length,true);m.setUint32(24,ham.length,true);m.setUint16(28,adB.length,true);m.setUint32(42,ofs,true);
+    merkez.push(new Uint8Array(m.buffer),adB);ofs+=30+adB.length+veri.length}
+  const mBoy=merkez.reduce((a,x)=>a+x.length,0);const e=new DataView(new ArrayBuffer(22));e.setUint32(0,0x06054b50,true);e.setUint16(8,dosyalar.length,true);e.setUint16(10,dosyalar.length,true);e.setUint32(12,mBoy,true);e.setUint32(16,ofs,true);
+  return new Blob([...parcalar,...merkez,new Uint8Array(e.buffer)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})}
+const xEsc=v=>String(v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const xSut=i=>{let s='';i++;while(i>0){const m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26)}return s};
+function xSayfa(basliklar,satirlar){const r=(dizi,n,st)=>`<row r="${n}">${dizi.map((v,i)=>{const ref=xSut(i)+n;if(v===null||v===undefined||v==='')return'';
+    if(typeof v==='number'&&isFinite(v))return`<c r="${ref}"${st?' s="1"':''}><v>${Math.round(v*100)/100}</v></c>`;return`<c r="${ref}" t="inlineStr"${st?' s="1"':''}><is><t xml:space="preserve">${xEsc(v)}</t></is></c>`}).join('')}</row>`;
+  return`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:${xSut(basliklar.length-1)}${satirlar.length+1}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${basliklar.map((b,i)=>`<col min="${i+1}" max="${i+1}" width="${Math.max(10,Math.min(40,b.length+6))}" customWidth="1"/>`).join('')}</cols><sheetData>${r(basliklar,1,true)}${satirlar.map((x,i)=>r(x,i+2)).join('')}</sheetData><autoFilter ref="A1:${xSut(basliklar.length-1)}${satirlar.length+1}"/></worksheet>`}
+async function xlsxYap(sayfalar){const ad=sayfalar.map(x=>x[0]);
+  const d=[['[Content_Types].xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${ad.map((_,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`],
+    ['_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+    ['xl/workbook.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${ad.map((a,i)=>`<sheet name="${xEsc(a)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join('')}</sheets></workbook>`],
+    ['xl/_rels/workbook.xml.rels',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${ad.map((_,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join('')}<Relationship Id="rId${ad.length+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
+    ['xl/styles.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="2"><xf xfId="0"/><xf fontId="1" xfId="0" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>']];
+  sayfalar.forEach((x,i)=>d.push([`xl/worksheets/sheet${i+1}.xml`,xSayfa(x[1],x[2])]));return zipYap(d)}
+function yedekSayfalari(){const sb=id=>(B(id)||{}).ad||'',uz=id=>id?(U(id)||{}).ad||'':'',fr=id=>id?(F(id)||{}).ad||'':'',od=id=>(O(id)||{}).ad||'',kisi=p=>p&&p.ad?[p.ad,p.tel||'']:['',''];
+  const dan=S.danisanlar.map(d=>[d.ad,d.tel||'',d.tur||'',sb(d.subeId),fr(d.firmaId),uz(d.sahipUzmanId),uz(d.takipUzman),...kisi(d.es),...kisi(d.anne),...kisi(d.baba),...kisi(d.veli),d.kayit||'',d.arsiv||'',d.kvkk?'Alındı '+d.kvkk.t:'',d.anonim?'Evet '+d.anonim:'']);
+  const ses=[...S.seanslar].sort((a,b)=>(a.tarih+a.saat).localeCompare(b.tarih+b.saat)).map(s=>{const d=D(s.danisanId)||{},o=s.odeme||{};return[s.tarih,s.saat,sb(s.subeId),od(s.odaId),d.ad||'',d.tel||'',uz(s.uzmanId),s.tur||'',kayAd(s.kaynak),fr(s.firmaId),s.kaynak==='firma'&&s.durum==='odendi'?'Tamamlandı':durumAd[s.durum]||s.durum,s.ucret,o.tahsilat,o.kdv,o.matrah,o.oran,o.ofis,o.uzman,o.kanal||'',o.tarih||'',s.not||'']});
+  const u=S.uzmanlar.map(x=>[x.ad,x.tel||'',x.email||'',(x.subeIds||[]).map(sb).join(', '),x.oranKendi,x.oranYonlendirme,x.aktif?'Aktif':'Pasif',x.telGor?'Evet':'Hayır',x.sms?'Evet':'Hayır']);
+  const f=S.firmalar.map(x=>[x.ad,x.seansHakki,x.vergi||'',x.adres||'',x.yetkili||'',(x.subeIds||[]).map(sb).join(', ')]);
+  const g=[...S.masraflar].sort((a,b)=>a.tarih.localeCompare(b.tarih)).map(x=>[x.tarih,sb(x.subeId),x.kategori||'',x.aciklama||'',x.tutar]);
+  const uo=[...S.uzmanOdemeleri].sort((a,b)=>(a.tarih||'').localeCompare(b.tarih||'')).map(x=>[x.tarih||'',x.ay||'',uz(x.uzmanId),sb(x.subeId),x.tutar]);
+  const so=[];S.subeler.forEach(b=>{const l=subeOdalari(b.id);(l.length?l:[null]).forEach(o=>so.push([b.ad,b.adres||'',b.tel||'',b.acilis||'',b.kapanis||'',o?o.ad:'',o?o.tur:'']))});
+  return[['Danışanlar',['Ad','Telefon','Tür','Şube','Firma','Kendi danışanı (uzman)','Takip eden uzman','Eş','Eş tel','Anne','Anne tel','Baba','Baba tel','Veli','Veli tel','Kayıt','Arşiv seans','KVKK formu','Anonimleştirildi'],dan],
+    ['Seanslar',['Tarih','Saat','Şube','Oda','Danışan','Danışan tel','Uzman','Tür','Kaynak','Firma','Durum','Ücret','Tahsilat','KDV','Matrah','Ofis %','Ofis payı','Uzman hak ediş','Ödeme kanalı','Ödeme tarihi','Not'],ses],
+    ['Uzmanlar',['Ad','Telefon','E-posta','Şubeler','Kendi danışanı ofis %','Ofis danışanı ofis %','Durum','Telefon görür','SMS'],u],
+    ['Firmalar',['Ad','Seans hakkı','Vergi','Adres','Yetkili','Şubeler'],f],['Giderler',['Tarih','Şube','Kategori','Açıklama','Tutar'],g],
+    ['Uzman ödemeleri',['Tarih','Ay','Uzman','Şube','Tutar'],uo],['Şubeler ve odalar',['Şube','Adres','Telefon','Açılış','Kapanış','Oda','Oda türü'],so]]}
 function vAktar(){const A_=UI.aktarim;const o=A_&&A_.ozet;const son=o&&o.kaynak?aktarimSayim(aktarimSon(A_)):null;const M=(A_&&A_.uzMod)||new Map();
   return`<div class="page-head"><div><h1>Veri Aktarımı</h1><p>Eski sistemden dışa aktarılan randevu dosyasını (CSV) yükleyin.</p></div></div>
+  <div class="card"><h2>${ic('dl')} Tüm verilerin yedeğini indir</h2><p class="small muted" style="margin:0">Danışanlar, seanslar, uzmanlar, firmalar, giderler, uzman ödemeleri, şube ve odalar tek bir Excel dosyasında (her biri ayrı sayfa). Dosya şifresizdir ve tüm telefon numaralarını içerir: güvenli bir yerde saklayın.</p>
+    <div class="kdvrow">${SUNUCU?`<input type="password" id="yd_s" placeholder="Yönetici şifreniz" autocomplete="current-password">`:''}<button class="btn primary" data-act="yedekIndir" style="flex:none">${ic('dl')}Excel olarak indir</button></div><span class="small muted" id="yd_durum"></span></div>
   <div class="cmsg" style="background:var(--surface);border:1px solid var(--line);color:var(--ink);font-weight:500"><span>${ic('shield')} ${SUNUCU?'<b>Dosya bu cihazda okunur, kayıtlar yalnızca kendi sunucunuza şifreli olarak gönderilir.</b> Başka hiçbir yere (GitHub, üçüncü taraf) gitmez. TC kimlik ve fatura bilgileri aktarılmaz. Aktarım hiçbir SMS göndermez.':'<b>Veriler yalnızca bu cihazda kalır.</b> Dosya tarayıcınızın içinde okunur ve bu tarayıcının deposunda saklanır; hiçbir sunucuya, GitHub\'a ya da başka bir yere gönderilmez. Başka bir bilgisayarda görmek için dosyayı orada da yüklemeniz gerekir.'}</span></div>
   <div class="card"><h2>1. Dosyayı seçin</h2>
     <label class="btn" style="align-self:flex-start;cursor:pointer">${ic('dl')}CSV dosyası seç<input type="file" id="aktarDosya" accept=".csv,text/csv" data-chg="aktarSec" style="position:absolute;opacity:0;width:1px;height:1px"></label>
@@ -1765,6 +1808,31 @@ const VIEWS={gorusmeler:vGorusmeler,takvim:vTakvim,randevu:()=>vRandevu('asistan
   ajanda:vAjanda,danisanlarim:vDanisanlarim,kendi:()=>vRandevu('psikolog'),hakedis:vHakedis,musaitlik:vMusaitlik};
 /* ============ Hesaplar (yalnızca sunucu sürümü) ============ */
 const HS={liste:null,hata:''};
+/* ---- Olay kaydı (yönetici) ---- */
+const OL={liste:null,kisiler:[],hata:'',f:{grup:'',kisi:'',bas:'',bit:''},sayfa:0,devam:false,yukleniyor:false};
+const OLAY_AD={giris:'Giriş yaptı',giris_hatali:'Hatalı giriş denemesi',giris_kilitli:'Giriş geçici olarak bekletildi',cikis:'Çıkış yaptı',
+  yetkisiz_istek:'Yetkisiz istek',yetkisiz_yazma:'Yetkisi olmayan değişiklik denemesi',yonetici_onay_hatali:'Yönetici şifre onayı hatalı',sifre_degisim_hatali:'Şifre değiştirirken eski şifre hatalı',
+  sifre_degisti:'Şifresini değiştirdi',hesap_olusturuldu:'Hesap açıldı',hesap_guncellendi:'Hesap güncellendi',hesap_silindi:'Hesap silindi',hesap_sifre_sifirlandi:'Şifre sıfırlandı',hesap_oturum_kapatildi:'Oturumları kapatıldı',
+  danisan_anonimlestirildi:'Danışan anonimleştirildi (KVKK)',aktarim_basladi:'Veri aktarımı başladı',aktarim_tamamlandi:'Veri aktarımı tamamlandı',yedek_indirildi:'Tüm verilerin yedeği indirildi',veri_kaydedildi:'Kayıt değişikliği',
+  sms_ayar_kaydedildi:'SMS ayarı kaydedildi',sms_ayar_silindi:'SMS ayarı silindi',sms_kilit:'SMS ana anahtarı değişti',sms_reddedildi:'SMS reddedildi',sms_sinir:'SMS sınırı aşıldı',sms_test:'Test SMS',sms_test_modu:'SMS test modu',
+  planli_sms_olusturuldu:'Planlı SMS oluşturuldu',planli_sms_iptal:'Planlı SMS iptal edildi',bildirim_ayar:'Bildirim ayarı değişti',kurtarma_hatali:'Şifre kurtarma: hatalı deneme',yonetici_sifre_kurtarildi:'Yönetici şifresi kurtarıldı'};
+const OLAY_UYARI=new Set(['giris_kilitli','yetkisiz_istek','yetkisiz_yazma','yonetici_onay_hatali','sifre_degisim_hatali','kurtarma_hatali','yonetici_sifre_kurtarildi','giris_hatali']);
+const tarayiciAd=u=>{u=u||'';const c=/Android/.test(u)?'Android':/iPhone|iPad/.test(u)?'iPhone':/Windows/.test(u)?'Windows':/Mac OS/.test(u)?'Mac':/Linux/.test(u)?'Linux':'';
+  const t=/Edg\//.test(u)?'Edge':/SamsungBrowser/.test(u)?'Samsung':/OPR\//.test(u)?'Opera':/Firefox\//.test(u)?'Firefox':/Chrome\//.test(u)?'Chrome':/Safari\//.test(u)?'Safari':'';return[c,t].filter(Boolean).join(' · ')};
+function olYukle(){OL.yukleniyor=true;OL.hata='';const q=new URLSearchParams({...OL.f,sayfa:OL.sayfa});
+  API.cagir('olaylar?'+q.toString()).then(o=>{OL.liste=o.olaylar||[];OL.kisiler=o.kisiler||[];OL.devam=!!o.devam}).catch(e=>{OL.hata=e.message}).finally(()=>{OL.yukleniyor=false;if(UI.view==='hesaplar')render()})}
+const olKisi=r=>r.ad||r.email||(r.olay==='giris_hatali'||r.olay==='giris_kilitli'?(r.detay||'').replace(/ \(.*\)$/,''):'')||'—';
+const olDetay=r=>r.olay==='giris_hatali'||r.olay==='giris_kilitli'?(r.detay&&r.detay.includes('tanınan')?'Tanınan cihaz':''):r.olay==='veri_kaydedildi'?(()=>{try{const o=JSON.parse(r.detay);return Object.entries(o).map(([k,v])=>k+': '+(typeof v==='object'?JSON.stringify(v):v)).join(', ')}catch(e){return r.detay||''}})():(r.detay||'');
+function vOlaylar(){if(!OL.liste&&!OL.yukleniyor&&!OL.hata)setTimeout(olYukle,0);const f=OL.f;
+  const fil=`<div class="card" style="gap:10px"><div class="row2">${fld('Olay türü',`<select id="ol_grup" data-chg="olFiltre">${[['','Tümü (kayıt değişiklikleri hariç)'],['giris','Girişler'],['guvenlik','Güvenlik uyarıları'],['hesap','Hesap ve şifre'],['veri','Veri (aktarım, yedek, KVKK, kayıt değişiklikleri)'],['sms','SMS ve bildirim'],['hepsi','Hepsi']].map(([k,l])=>`<option value="${k}" ${f.grup===k?'selected':''}>${l}</option>`).join('')}</select>`)}
+    ${fld('Kişi',`<select id="ol_kisi" data-chg="olFiltre"><option value="">Herkes</option>${OL.kisiler.map(k=>`<option value="${k.id}" ${String(f.kisi)===String(k.id)?'selected':''}>${esc(k.ad||k.email)} · ${ROL_AD[k.rol]||k.rol}</option>`).join('')}</select>`)}</div>
+    <div class="row2">${fld('Başlangıç',`<input type="date" id="ol_bas" value="${f.bas}" data-chg="olFiltre">`)}${fld('Bitiş',`<input type="date" id="ol_bit" value="${f.bit}" data-chg="olFiltre">`)}</div></div>`;
+  if(OL.hata)return fil+`<div class="empty"><b>Olay kaydı yüklenemedi</b>${esc(OL.hata)}<div style="margin-top:10px"><button class="btn sm" data-act="olYenile">Tekrar dene</button></div></div>`;
+  if(!OL.liste)return fil+'<div class="empty"><b>Yükleniyor…</b></div>';
+  if(!OL.liste.length)return fil+'<div class="empty"><b>Bu filtreyle kayıt yok</b>Filtreleri değiştirin.</div>';
+  return fil+`<div class="card" style="padding:0"><div class="dl ol-liste">${OL.liste.map(r=>{const u=OLAY_UYARI.has(r.olay);const z=r.zaman.replace(' ','T');
+    return`<div class="ol-satir ${u?'uyari':''}"><span class="ol-z num">${fmtD(z.slice(0,10),{day:'numeric',month:'short'})} ${z.slice(11,16)}</span><span class="ol-o"><b>${esc(OLAY_AD[r.olay]||r.olay)}</b><span class="small muted">${esc(olKisi(r))}${r.rol?' · '+(ROL_AD[r.rol]||r.rol):''}${olDetay(r)?' · '+esc(olDetay(r)):''}</span></span><span class="ol-c small muted">${esc(tarayiciAd(r.tarayici))}${r.ip?`<br>${esc(r.ip)}`:''}</span></div>`}).join('')}</div></div>
+  <div class="pager"><button class="btn sm" data-act="olSayfa" data-v="-1" ${OL.sayfa?'':'disabled'}>Daha yeni</button><button class="btn sm" data-act="olCsv">${ic('dl')}Bu listeyi indir</button><button class="btn sm" data-act="olSayfa" data-v="1" ${OL.devam?'':'disabled'}>Daha eski</button></div>`}
 function hsZaman(s){if(!s)return'';const d=new Date(String(s).replace(' ','T'));if(isNaN(d))return'';
   const o={day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'};if(d.getFullYear()!==new Date().getFullYear())o.year='numeric';return d.toLocaleString('tr-TR',o)}
 function hsBag(h){if(h.rol==='yonetici')return{ad:h.ad||'Yönetici',alt:'Yönetici',var:true};
@@ -1778,7 +1846,9 @@ function hsEksik(){const L=HS.liste||[];const var_=(rol,kod)=>L.some(h=>h.rol===
     ...S.uzmanlar.filter(u=>u.aktif&&!var_('psikolog',u.id)).map(u=>({rol:'psikolog',kod:u.id,ad:u.ad,email:u.email||''}))]}
 function hsYukle(){HS.hata='';API.cagir('hesaplar').then(o=>{HS.liste=o.hesaplar||[];hsOnar();if(UI.view==='hesaplar')render()}).catch(e=>{HS.hata=e.message;if(UI.view==='hesaplar')render()})}
 function vHesaplar(){
-  const head=`<div class="page-head"><div><h1>Hesaplar</h1><p>Sisteme kimlerin girebildiği: hesap açma, şifre, aktif/pasif</p></div>${HS.liste?`<button class="btn primary" data-act="hsEkle">${ic('plus')}Hesap ekle</button>`:''}</div>`;
+  const sekme=SUNUCU?`<div class="seg" style="align-self:flex-start;margin-bottom:4px">${[['hesap','Hesaplar'],['olay','Olay kaydı']].map(([k,l])=>`<button class="${(UI.hsSekme||'hesap')===k?'on':''}" data-act="hsSekme" data-v="${k}">${l}</button>`).join('')}</div>`:'';
+  if(SUNUCU&&UI.hsSekme==='olay')return`<div class="page-head"><div><h1>Olay kaydı</h1><p>Girişler, şifre ve hesap değişiklikleri, güvenlik uyarıları</p></div></div>${sekme}${vOlaylar()}`;
+  const head=`<div class="page-head"><div><h1>Hesaplar</h1><p>Sisteme kimlerin girebildiği: hesap açma, şifre, aktif/pasif</p></div>${HS.liste?`<button class="btn primary" data-act="hsEkle">${ic('plus')}Hesap ekle</button>`:''}</div>`+sekme;
   if(HS.hata)return head+`<div class="empty"><b>Hesaplar yüklenemedi</b>${esc(HS.hata)}<div style="margin-top:10px"><button class="btn sm" data-act="hsYenile">Tekrar dene</button></div></div>`;
   if(!HS.liste)return head+'<div class="empty"><b>Yükleniyor…</b></div>';
   const RS={yonetici:0,asistan:1,psikolog:2};const L=HS.liste.map(h=>({...h,bag:hsBag(h)})).sort((x,y)=>RS[x.rol]-RS[y.rol]||x.bag.ad.localeCompare(y.bag.ad,'tr'));const sahipsiz=L.filter(h=>!h.bag.var),eksik=hsEksik();
@@ -2008,7 +2078,7 @@ const A={
     h.obj.sifre=y;kapat();commit();toast('Şifreniz güncellendi.')},
   sifreGoster(d,el){const i=$('#g_s');const g=i.type==='password';i.type=g?'text':'password';el.setAttribute('aria-label',g?'Şifreyi gizle':'Şifreyi göster');el.style.color=g?'var(--accent)':''},
   sifreUnut(){const e=$('#g_hata');e.hidden=false;e.className='cmsg';e.style.background='var(--surface-2)';e.style.color='var(--ink)';e.innerHTML='<span>Şifrenizi sıfırlamak için yöneticinizle iletişime geçin.</span>'},
-  girisRol(d,el){UI.girisRol=el.value;$('#g_hata').hidden=true;$('#g_k').focus()},
+  girisRol(d,el){UI.girisRol=el.value;$('#g_hata').hidden=true;const kl=$('#g_kalici_l');if(kl){kl.hidden=el.value==='yonetici';if(kl.hidden)$('#g_kalici').checked=false}$('#g_k').focus()},
   demoDoldur(d){const r=document.querySelector(`input[name="g_rol"][value="${d.r}"]`);if(r){r.checked=true;UI.girisRol=d.r}$('#g_k').value=d.k;$('#g_s').value='demo1234';$('#g_hata').hidden=true;$('#g_btn').focus()},
   girisYap(){const e=$('#g_hata');const goster=m=>{e.hidden=false;e.className='cmsg err';e.removeAttribute('style');e.innerHTML=`<span>${m}</span>`};
     const now=Date.now();if(A._kilit&&now<A._kilit){goster(`Çok fazla hatalı deneme. ${Math.ceil((A._kilit-now)/1000)} saniye sonra tekrar deneyin.`);return}
@@ -2017,7 +2087,7 @@ const A={
     if(!EPOSTA_RE.test(k)){goster('Geçerli bir e-posta adresi girin.');$('#g_k').focus();return}
     const rol=(document.querySelector('input[name="g_rol"]:checked')||{}).value||'asistan';UI.girisRol=rol;
     if(SUNUCU){const b=$('#g_btn');b.disabled=true;b.textContent='Giriş yapılıyor…';
-      API.cagir('giris',{rol,email:k,sifre:sf}).then(async o=>{b.textContent='Veriler yükleniyor…';
+      API.cagir('giris',{rol,email:k,sifre:sf,kalici:rol!=='yonetici'&&!!($('#g_kalici')||{}).checked}).then(async o=>{b.textContent='Veriler yükleniyor…';
         try{await girisSonrasi(o.kullanici)}catch(x){API.cagir('cikis',{}).catch(()=>{});SENK.durdur();throw x}
         UI.view=null;UI.per={tip:'gun',ref:TODAY};UI._ozetSet=0;UI._hkSet=0;saveUI();render();scrollTo(0,0);toast(`Hoş geldiniz, ${o.kullanici.ad||ROL_AD[o.kullanici.rol]} · ${ROL_AD[o.kullanici.rol]} paneli.`)})
       .catch(x=>{goster(esc(x.message));const i=$('#g_s');if(i)i.select()})
@@ -2278,6 +2348,19 @@ const A={
 
 Object.assign(A,{
   hsYenile(){HS.liste=null;render();hsYukle()},
+  async yedekIndir(d,el){const durum=$('#yd_durum');
+    if(SUNUCU){const sf=$('#yd_s').value;if(!sf){toast('Şifrenizi girin.',1);$('#yd_s').focus();return}
+      el.disabled=true;durum.textContent='Şifre doğrulanıyor…';try{await API.cagir('yedek-onay',{onay:sf})}catch(e){el.disabled=false;durum.textContent='';toast(e.message,1);return}}
+    el.disabled=true;durum.textContent='Dosya hazırlanıyor…';await new Promise(r=>setTimeout(r,30));
+    try{const sp=yedekSayfalari();const blob=await xlsxYap(sp);const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`AsistPsikolog_yedek_${TODAY}.xlsx`;document.body.appendChild(a);a.click();a.remove();
+      durum.textContent=`İndirildi · ${sp[0][2].length.toLocaleString('tr-TR')} danışan, ${sp[1][2].length.toLocaleString('tr-TR')} seans · ${(blob.size/1048576).toFixed(1)} MB`;if($('#yd_s'))$('#yd_s').value=''}
+    catch(e){durum.textContent='';toast('Dosya hazırlanamadı: '+e.message,1)}finally{el.disabled=false}},
+  hsSekme(d){UI.hsSekme=d.v;if(d.v==='olay'){OL.liste=null;OL.sayfa=0}render()},
+  olFiltre(){OL.f={grup:val('ol_grup'),kisi:val('ol_kisi'),bas:val('ol_bas'),bit:val('ol_bit')};OL.sayfa=0;OL.liste=null;render()},
+  olYenile(){OL.liste=null;OL.hata='';render()},
+  olSayfa(d){OL.sayfa=Math.max(0,OL.sayfa+Number(d.v));OL.liste=null;render();scrollTo(0,0)},
+  olCsv(){const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';const t=['Zaman;Olay;Kişi;Rol;Ayrıntı;Cihaz;IP'].concat((OL.liste||[]).map(r=>[r.zaman,OLAY_AD[r.olay]||r.olay,olKisi(r),ROL_AD[r.rol]||r.rol||'',olDetay(r),tarayiciAd(r.tarayici),r.ip||''].map(q).join(';'))).join('\n');
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+t],{type:'text/csv;charset=utf-8'}));a.download=`olay_kaydi_${TODAY}.csv`;document.body.appendChild(a);a.click();a.remove()},
   hsf(d){UI.hsf=d.v;render()},
   hsDuz(d){const h=hsBul(d.id);if(!h)return;const g=hsBag(h);
     const yon=h.rol==='yonetici';
