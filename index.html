@@ -319,6 +319,7 @@ input[type="date"]::-webkit-date-and-time-value{text-align:center;margin:0 auto;
 .cmsg{border-radius:10px;padding:10px 12px;font-size:.86rem;display:flex;flex-direction:column;gap:4px}
 .cmsg.ok{background:color-mix(in srgb,var(--ok) 12%,transparent);color:var(--ok);font-weight:600}
 .cmsg.err{background:color-mix(in srgb,var(--bad) 10%,transparent);color:var(--bad);font-weight:600}
+.cmsg.warn{background:color-mix(in srgb,var(--warn) 12%,transparent);color:var(--warn);font-weight:500}
 .form-grid{display:grid;grid-template-columns:1fr;gap:16px}
 @media (min-width:960px){.form-grid{grid-template-columns:1fr 1fr;align-items:start}.form-grid .fa{grid-column:1/-1}}
 .fa{display:flex;justify-content:flex-end;gap:10px;position:sticky;bottom:calc(72px + env(safe-area-inset-bottom,0px));z-index:5;background:linear-gradient(transparent,var(--bg) 35%);padding-top:14px}
@@ -379,6 +380,7 @@ table.cal{border-collapse:separate;border-spacing:0;min-width:100%}
 @media (max-width:640px){.ol-satir{grid-template-columns:62px minmax(0,1fr)}.ol-c{grid-column:2;text-align:left}}
 .nw{white-space:nowrap}
 .dsira{display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--muted);white-space:nowrap}.dsira select{width:auto;min-width:0}
+.badge.b-ilk{background:#FCEBEB;color:#A32D2D;border:1px solid #F7C1C1;font-size:.72rem;vertical-align:middle;white-space:nowrap}
 .cell-cok{display:flex;flex-direction:column;gap:3px}
 .cell-cok .cell{min-height:40px}
 .cell-say{font-size:.68rem;font-weight:700;color:var(--accent);text-align:center}
@@ -1381,16 +1383,21 @@ function vGiderler(){const[b,e]=perRange();const list=S.masraflar.filter(m=>m.su
   ${list.length?`<div class="tw"><table class="tbl"><thead><tr><th>Tarih</th><th>Kategori</th><th>Açıklama</th><th class="r">Tutar</th><th></th></tr></thead><tbody>${list.map(m=>`<tr><td class="num">${fmtD(m.tarih,{day:'numeric',month:'short'})}</td><td>${esc(m.kategori)}</td><td>${esc(m.aciklama)}</td><td class="r">${TL(m.tutar)}</td><td class="r"><button class="btn sm danger" data-act="gSil" data-id="${m.id}">Sil</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty"><b>Bu dönemde gider yok</b>Yukarıdaki formdan ekleyebilirsiniz.</div>'}</div>`}
 
 /* ============ Toplu SMS ============ */
+// Danışanın ilk görüşmesi mi: daha önce iptal edilmemiş seansı yok, eski sistemden arşiv seansı yok ve kaydı 12 aylık pencereden eski değil
+function ilkGorusme(s){const d=D(s.danisanId);if(!d||d.arsiv)return false;if(SENK.sinir&&d.kayit&&d.kayit<SENK.sinir)return false;
+  return!S.seanslar.some(x=>x.id!==s.id&&x.danisanId===s.danisanId&&x.durum!=='iptal'&&(x.tarih+x.saat)<(s.tarih+s.saat))}
 function vSms(){const t=UI.smsT||addDays(TODAY,1);
   const list=S.seanslar.filter(s=>s.subeId===UI.subeId&&s.tarih===t&&s.durum==='bekliyor').sort((a,b)=>a.saat.localeCompare(b.saat));
-  UI.smsSel=UI.smsSel&&UI.smsSel.t===t?UI.smsSel:{t,ids:new Set(list.map(s=>s.id))};
+  // İlk görüşmeler toplu seçime varsayılan olarak girmez; asistan görüp ayrıca gönderir
+  UI.smsSel=UI.smsSel&&UI.smsSel.t===t?UI.smsSel:{t,ids:new Set(list.filter(s=>!ilkGorusme(s)).map(s=>s.id))};const nIlk=list.filter(ilkGorusme).length;
   const sel=list.filter(s=>UI.smsSel.ids.has(s.id));const nAl=sel.reduce((a,s)=>a+(smsAcik(s)?alicilar(D(s.danisanId)).length:0),0);
   const log=S.smsLog.filter(l=>l.subeId===UI.subeId).slice(0,12);
   return`${SUNUCU&&SENK.smsKapali?'<div class="cmsg err" style="margin-bottom:12px"><span><b>SMS gönderimi kapalı.</b> Yönetici açana kadar hiçbir numaraya SMS gitmez; gönderimler yalnızca “gönderilmedi” olarak kaydedilir.</span></div>':''}<div class="page-head"><div><h1>Toplu SMS</h1><p>${S.netgsm.kod?`NetGSM bağlı · başlık ${esc(S.netgsm.baslik)}`:'NetGSM hesabı tanımlı değil · gönderimler simülasyon olarak kaydedilir'}</p></div></div>
   <div class="form-grid">
   <div class="card"><div class="card-h"><h2>Seanslar</h2><input type="date" class="inp" style="width:auto;min-height:40px" value="${t}" data-chg="smsTarih" aria-label="Tarih"></div>
    ${list.length?`<label class="chk"><input type="checkbox" id="smsAll" data-chg="smsTum" ${sel.length===list.length?'checked':''}> <b>Tümünü seç</b> <span class="muted small">(${list.length} seans)</span></label>
-   <div class="dl">${list.map(s=>{const d=D(s.danisanId);const a=alicilar(d);return`<label class="row" style="display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--accent)" data-chg="smsSec" data-id="${s.id}" ${UI.smsSel.ids.has(s.id)?'checked':''}><span style="min-width:0"><b>${s.saat} · ${esc(d.ad)}</b><span class="mt" style="display:block;font-size:.8rem;color:var(--muted)">${esc(U(s.uzmanId).ad)} · ${!smsAcik(s)?'Uzman için SMS kapalı':a.length?a.map(x=>esc(x.ad.split(' ')[0])).join(', '):'SMS izni yok'}</span></span><span class="small muted">${smsAcik(s)?a.length:0} alıcı</span></label>`}).join('')}</div>`:`<div class="empty"><b>${fmtD(t,{day:'numeric',month:'long'})} için bekleyen seans yok</b>Başka bir tarih seçin.</div>`}
+   ${nIlk?`<div class="cmsg warn" style="margin:0"><span><b>${nIlk} ilk görüşme</b> kırmızı etiketle işaretli ve toplu gönderime varsayılan olarak dahil değil. Kontrol edip göndermek istediklerinizi işaretleyin.</span></div>`:''}
+   <div class="dl">${list.map(s=>{const d=D(s.danisanId);const a=alicilar(d);return`<label class="row" style="display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--accent)" data-chg="smsSec" data-id="${s.id}" ${UI.smsSel.ids.has(s.id)?'checked':''}><span style="min-width:0"><b>${s.saat} · ${esc(d.ad)}</b>${ilkGorusme(s)?' <span class="badge b-ilk">İlk görüşme</span>':''}<span class="mt" style="display:block;font-size:.8rem;color:var(--muted)">${esc(U(s.uzmanId).ad)} · ${!smsAcik(s)?'Uzman için SMS kapalı':a.length?a.map(x=>esc(x.ad.split(' ')[0])).join(', '):'SMS izni yok'}</span></span><span class="small muted">${smsAcik(s)?a.length:0} alıcı</span></label>`}).join('')}</div>`:`<div class="empty"><b>${fmtD(t,{day:'numeric',month:'long'})} için bekleyen seans yok</b>Başka bir tarih seçin.</div>`}
   </div>
   <div class="card"><h2>Mesaj</h2>
    <div class="smsprev">${sel.length?esc(doldur(sablonAl(sel[0].subeId,'d_hatirlatma'),sel[0])):'<span class="muted">Önizleme için seans seçin.</span>'}</div>
