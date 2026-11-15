@@ -1293,15 +1293,31 @@ function formKontrol(){
   box.innerHTML=e.length?e.map(x=>`<span>• ${esc(x)}</span>`).join(''):`<span>✓ Uygun: ${esc(U(p.uzmanId).ad)} ve ${esc(O(p.odaId).ad)} ${p.saat} için boş.</span>${U(p.uzmanId).sms?'':'<span class="small">Bu uzman için SMS hizmeti kapalı; danışana ve uzmana SMS gönderilmeyecek.</span>'}`;
   $$('#r_slots .slot').forEach(b=>b.classList.toggle('on',b.dataset.h===p.saat));
 }
-/* Çift kaydındaki kişilerin bireysel seansları ayrı danışan kaydında tutulur; çift kaydı değişmez */
-function ciftKisi(d,k){return k==='es'?{ad:d.es.ad,tel:d.es.tel||''}:{ad:d.ad,tel:d.tel||''}}
-function bireyselKayit(d,k){const p=ciftKisi(d,k);const n=adNorm(p.ad),t=digits(p.tel).slice(-10);
-  return S.danisanlar.find(x=>x.id!==d.id&&x.tur!=='Çift'&&!x.anonim&&adNorm(x.ad)===n&&(!t||digits(x.tel).slice(-10)===t))||null}
-function bireyselSecUygula(ciftId,k){const d=D(ciftId);if(!d||!d.es)return;const var_=bireyselKayit(d,k);
-  if(var_){acSecId(var_.id);if(rTur()==='Çift'){const r=document.querySelector('input[name="r_tur"][value="Yetişkin"]');if(r){r.checked=true;turBloklari();formYenile()}}return}
-  const p=ciftKisi(d,k);A.acTemizle();const r=document.querySelector('input[name="r_tur"][value="Yetişkin"]');if(r)r.checked=true;turBloklari();
-  $('#r_ad').value=p.ad;$('#r_tel').value=p.tel;$('#sms_ana').checked=true;$('#acWrap').hidden=true;const sec=$('#r_secili');sec.hidden=false;RS.ciftKaynak=ciftId;
-  sec.innerHTML=`<div class="secili"><div class="grow"><b>${esc(p.ad)}</b><span class="small muted">Yeni bireysel kayıt · ${esc(d.ad)} &amp; ${esc(d.es.ad)} çift kaydından. Çift kaydı ve seansları değişmez.</span></div><button type="button" class="btn sm" data-act="acTemizle">Değiştir</button></div>`;
+/* Bir kayıttaki kişiler (çiftteki eş, çocuğun anne/babası) kendi seansları için AYRI kayıt kullanır; asıl kayıt değişmez.
+   Tür grupları: Çift · Çocuk/Ergen · Yetişkin. Aynı grup içinde (ör. Çocuk → Ergen) kayıt aynı kalır. */
+const turGrup=t=>t==='Çift'?'cift':(t==='Çocuk'||t==='Ergen')?'cocuk':'yetiskin';
+const KISI_AD={ana:'',es:'',anne:'Anne',baba:'Baba'};
+function kisiAl(d,k){const x=k==='ana'?d:d[k];return x&&x.ad?{ad:x.ad,tel:x.tel||''}:null}
+// Kayıttan başka kişiler için seçenekler: [anahtar, etiket, hedef tür]
+function kisiSecenekleri(d){const o=[];
+  if(d.tur==='Çift'&&d.es&&d.es.ad){o.push(['ana',d.ad,'Yetişkin']);o.push(['es',d.es.ad,'Yetişkin'])}
+  if(turGrup(d.tur)==='cocuk'){['anne','baba'].forEach(k=>{const x=kisiAl(d,k);if(x)o.push([k,`${KISI_AD[k]} ${x.ad}`,'Yetişkin'])});
+    if(kisiAl(d,'anne')&&kisiAl(d,'baba'))o.push(['ebeveyn',`${d.anne.ad} & ${d.baba.ad}`,'Çift'])}
+  return o}
+function hedefKayit(d,k){if(k==='ebeveyn'){const a=d.anne,b=d.baba;const n=adNorm(a.ad),m=adNorm(b.ad);
+    return S.danisanlar.find(x=>x.id!==d.id&&x.tur==='Çift'&&!x.anonim&&x.es&&((adNorm(x.ad)===n&&adNorm(x.es.ad)===m)||(adNorm(x.ad)===m&&adNorm(x.es.ad)===n)))||null}
+  const p=kisiAl(d,k);if(!p)return null;const n=adNorm(p.ad),t=digits(p.tel).slice(-10);
+  return S.danisanlar.find(x=>x.id!==d.id&&x.tur!=='Çift'&&turGrup(x.tur)==='yetiskin'&&!x.anonim&&adNorm(x.ad)===n&&(!t||digits(x.tel).slice(-10)===t))||null}
+const bireyselKayit=hedefKayit;
+function turSec(t){const r=document.querySelector(`input[name="r_tur"][value="${t}"]`);if(r){r.checked=true;turBloklari()}}
+function bireyselSecUygula(kayitId,k){const d=D(kayitId);if(!d)return;const sec=kisiSecenekleri(d).find(x=>x[0]===k);if(!sec)return;const hedefTur=sec[2];
+  const var_=hedefKayit(d,k);if(var_){acSecId(var_.id);if(turGrup(rTur())!==turGrup(hedefTur)){turSec(hedefTur);formYenile()}return}
+  A.acTemizle();turSec(hedefTur);
+  if(k==='ebeveyn'){$('#r_ad').value=d.anne.ad;$('#r_tel').value=d.anne.tel||'';$('#r_es_ad').value=d.baba.ad;$('#r_es_tel').value=d.baba.tel||'';$('#sms_ana').checked=true;const se=$('#sms_es');if(se)se.checked=!!d.baba.tel}
+  else{const p=kisiAl(d,k);$('#r_ad').value=p.ad;$('#r_tel').value=p.tel;$('#sms_ana').checked=true}
+  $('#acWrap').hidden=true;const kutu=$('#r_secili');kutu.hidden=false;RS.ciftKaynak=kayitId;
+  const asil=d.tur==='Çift'&&d.es?`${esc(d.ad)} &amp; ${esc(d.es.ad)} çift kaydından`:`${esc(d.ad)} (${d.tur}) kaydından`;
+  kutu.innerHTML=`<div class="secili"><div class="grow"><b>${esc(sec[1])}</b><span class="small muted">Yeni ${hedefTur==='Çift'?'çift':'bireysel'} kayıt · ${asil}. Asıl kayıt ve seansları değişmez.</span></div><button type="button" class="btn sm" data-act="acTemizle">Değiştir</button></div>`;
   telAlanlariniKontrolEt();formYenile()}
 function acSecId(id){const d=D(id);if(!d)return;RS.ciftKaynak=null;
   $('#r_did').value=id;$('#acWrap').hidden=true;const sec=$('#r_secili');sec.hidden=false;
@@ -2213,9 +2229,9 @@ const A={
     // Önce adı eşleşenler, sonra çiftteki eş, en son anne/baba/telefon eşleşmeleri
     const sira=x=>low(x.ad).startsWith(ql)?0:low(x.ad).includes(ql)?1:(x.tur==='Çift'&&x.es&&low(x.es.ad).includes(ql))?2:3;
     const res=dFiltre(pool,q).map((x,i)=>[x,sira(x),i]).sort((a,b)=>a[1]-b[1]||a[2]-b[2]).map(x=>x[0]).slice(0,8);
-    box.innerHTML=res.map(x=>{const cift=x.tur==='Çift'&&x.es&&x.es.ad;
-      return`<button type="button" data-act="acSec" data-id="${x.id}"><span><b>${hl(x.ad,q)}${cift?' &amp; '+hl(x.es.ad,q):''}</b><span class="small muted" style="display:block">${x.tel?esc(x.tel)+' · ':''}${x.tur?x.tur+' · ':''}${esc(B(x.subeId).ad)}</span></span><span class="small muted num">${toplamSeans(x)} seans</span></button>`
-      +(cift&&RS.mode!=='psikolog'?['ana','es'].map(k=>{const ad=k==='ana'?x.ad:x.es.ad;return`<button type="button" class="ac-alt" data-act="bireyselSec" data-id="${x.id}" data-k="${k}"><span>↳ <b>${hl(ad,q)}</b> · bireysel seans</span><span class="small muted">${bireyselKayit(x,k)?'kayıtlı':'yeni kayıt'}</span></button>`}).join(''):'')}).join('')+`<button type="button" class="new" data-act="acYeni">+ “${esc(q)}” adıyla yeni danışan</button>`;box.hidden=false},
+    box.innerHTML=res.map(x=>{const cift=x.tur==='Çift'&&x.es&&x.es.ad;const alt=RS.mode!=='psikolog'?kisiSecenekleri(x):[];
+      return`<button type="button" data-act="acSec" data-id="${x.id}"><span><b>${hl(x.ad,q)}${cift?' &amp; '+hl(x.es.ad,q):''}</b><span class="small muted" style="display:block">${x.tel?esc(x.tel)+' · ':''}${x.tur?x.tur+' · ':''}${esc(B(x.subeId).ad)}${turGrup(x.tur)==='cocuk'&&(x.anne||x.baba)?' · '+[x.anne&&x.anne.ad?'Anne '+esc(x.anne.ad):'',x.baba&&x.baba.ad?'Baba '+esc(x.baba.ad):''].filter(Boolean).join(', '):''}</span></span><span class="small muted num">${toplamSeans(x)} seans</span></button>`
+      +alt.map(([k,et,ht])=>`<button type="button" class="ac-alt" data-act="bireyselSec" data-id="${x.id}" data-k="${k}"><span>↳ <b>${hl(et,q)}</b> · ${ht==='Çift'?'çift seansı':'bireysel seans'}</span><span class="small muted">${hedefKayit(x,k)?'kayıtlı':'yeni kayıt'}</span></button>`).join('')}).join('')+`<button type="button" class="new" data-act="acYeni">+ “${esc(q)}” adıyla yeni danışan</button>`;box.hidden=false},
   anonimAc(d){const x=D(d.id);if(!x)return;const n=S.seanslar.filter(s=>s.danisanId===x.id).length;
     sheet('Kişisel verileri sil',`<div class="cmsg err"><span><b>Bu işlem geri alınamaz.</b></span></div>
     <div class="calc"><div><span>Silinecek</span><b>Ad soyad, telefon, eş / anne / baba bilgileri, seans notları; SMS kayıtlarında geçen ad ve numara</b></div>
@@ -2236,11 +2252,10 @@ const A={
   bireyselSec(d){const l=$('#acList');if(l)l.hidden=true;bireyselSecUygula(d.id,d.k)},
   acTemizle(){RS.ciftKaynak=null;$('#r_did').value='';$('#r_secili').hidden=true;$('#acWrap').hidden=false;RS.oneri=null;const on=$('#r_oneri');if(on)on.innerHTML='';['r_ad','r_tel','r_es_ad','r_es_tel','r_anne_ad','r_anne_tel','r_baba_ad','r_baba_tel','r_ara'].forEach(i=>{const e=$('#'+i);if(e)e.value=''});const ar=$('#r_ara');if(ar)ar.focus()},
   turDegis(){const d=val('r_did')&&D(val('r_did'));const t=rTur();
-    if(d&&d.tur==='Çift'&&d.es&&t!=='Çift'){const sec=$('#r_secili');
-      sec.innerHTML=`<div class="secili" style="flex-direction:column;align-items:stretch;gap:8px"><span><b>${esc(d.ad)} &amp; ${esc(d.es.ad)}</b> bir çift kaydı. Bireysel seans kimin için?</span><span style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn sm primary" data-act="bireyselSec" data-id="${d.id}" data-k="ana">${esc(d.ad)}</button><button type="button" class="btn sm primary" data-act="bireyselSec" data-id="${d.id}" data-k="es">${esc(d.es.ad)}</button><button type="button" class="btn sm" data-act="acTemizle">Başka danışan</button></span></div>`;
-      turBloklari();formYenile();return}
-    if(d&&d.tur!=='Çift'&&t==='Çift'){const sec=$('#r_secili');$('#r_did').value='';
-      sec.innerHTML=`<div class="secili"><div class="grow"><b>${esc(d.ad)}</b><span class="small muted">Yeni çift kaydı açılacak. ${esc(d.ad)} adlı bireysel kayıt ve seansları değişmez. Eşin / partnerin bilgilerini aşağıya girin.</span></div><button type="button" class="btn sm" data-act="acTemizle">Değiştir</button></div>`}
+    if(d&&turGrup(d.tur)!==turGrup(t)){const sec=$('#r_secili');const se=kisiSecenekleri(d).filter(x=>turGrup(x[2])===turGrup(t));
+      const baslik=d.tur==='Çift'&&d.es?`${esc(d.ad)} &amp; ${esc(d.es.ad)} bir çift kaydı.`:`${esc(d.ad)} bir ${d.tur.toLocaleLowerCase('tr')} kaydı.`;
+      if(se.length){sec.innerHTML=`<div class="secili" style="flex-direction:column;align-items:stretch;gap:8px"><span><b>${baslik}</b> ${t==='Çift'?'Çift seansı':'Bireysel seans'} kimin için?</span><span style="display:flex;gap:8px;flex-wrap:wrap">${se.map(([k,et])=>`<button type="button" class="btn sm primary" data-act="bireyselSec" data-id="${d.id}" data-k="${k}">${esc(et)}</button>`).join('')}<button type="button" class="btn sm" data-act="acTemizle">Başka danışan</button></span></div>`}
+      else{$('#r_did').value='';sec.innerHTML=`<div class="secili"><div class="grow"><b>${esc(d.ad)}</b><span class="small muted">${t} seansı için yeni kayıt açılacak; ${esc(d.ad)} adlı ${d.tur.toLocaleLowerCase('tr')} kaydı ve seansları değişmez. Bilgileri aşağıda kontrol edin.</span></div><button type="button" class="btn sm" data-act="acTemizle">Değiştir</button></div>`}}
     turBloklari();formYenile()},
   formYenile(d,el){if(el&&el.id==='r_tarih'){if(RS.mode==='psikolog')$('#r_saat').value='';else sonucGizle()}formYenile()},
   saatSecDegis(){sonucGizle();formKontrol()},
@@ -2274,13 +2289,13 @@ const A={
     if(!uz){toast('Uzman seçin.',1);const l=$('#r_uzmanlar');if(l)l.scrollIntoView({block:'center',behavior:'smooth'});return}
     const e=cakisma({tarih,saat,uzmanId:uz,odaId:oda,subeId:sub,danisanId:val('r_did')});if(e.length){toast(e[0],1);formKontrol();$('#r_msg').scrollIntoView({block:'center',behavior:'smooth'});return}
     const kaynak=rKaynak();let did=val('r_did');let d=did?D(did):null;const fid=kaynak==='firma'?val('r_firma'):null;
-    if(d&&((d.tur==='Çift')!==(tur==='Çift'))){d=null;did='';$('#r_did').value=''}
+    if(d&&turGrup(d.tur)!==turGrup(tur)){d=null;did='';$('#r_did').value=''}
     if(kaynak==='firma'&&!fid){toast('Firma seçin.',1);$('#r_firma').focus();return}
     if(!A._rOnay){const u=U(uz),o=O(oda);const ali=[['sms_ana',tel||(!cocuk?'':'')],['sms_es',tur==='Çift'&&val('r_es_tel')],['sms_anne',cocuk&&val('r_anne_tel')],['sms_baba',cocuk&&val('r_baba_tel')]].filter(([i,t])=>$('#'+i)&&chk(i)&&t).length;
       const istiyor=['sms_ana','sms_es','sms_anne','sms_baba'].some(i=>$('#'+i)&&chk(i));
       sheet('Randevuyu onaylayın',`<p class="small muted" style="margin:0">Bilgileri kontrol edin. Onayladığınızda randevu oluşturulur${u.sms?' ve SMS’ler gönderilir':''}.</p>
-        ${did?'':(()=>{const bz=benzerDanisanlar(ad,[tel,tur==='Çift'&&val('r_es_tel'),cocuk&&val('r_anne_tel'),cocuk&&val('r_baba_tel')]);const uyumlu=bz.filter(x=>(x.d.tur==='Çift')===(tur==='Çift'));return bz.length?`<div class="cmsg ${uyumlu.length?'err':'warn'}" style="flex-direction:column;align-items:stretch;gap:6px">${uyumlu.length?'<span><b>Bu kişi zaten kayıtlı olabilir.</b> Aynı kişiyse kaydı seçin; seans geçmişi tek kartta kalsın. Farklı biriyse (ör. aynı numarayı kullanan kardeş) yeni kayıt olarak devam edin.</span>':`<span>Bu kişi ${tur==='Çift'?'bireysel':'bir çift'} kaydında da geçiyor. ${tur==='Çift'?'Çift':'Bireysel'} seanslar için ayrı kayıt açılacak; mevcut kayıt ve seansları değişmez.</span>`}
-          ${bz.slice(0,5).map(x=>{const uyumsuz=(x.d.tur==='Çift')!==(tur==='Çift');return`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span><b>${esc(x.d.ad)}${x.d.tur==='Çift'&&x.d.es?' &amp; '+esc(x.d.es.ad):''}</b> <span class="small">${x.neden} · ${x.d.tur||''} · ${toplamSeans(x.d)} seans</span></span>${uyumsuz?`<span class="small" style="max-width:180px;text-align:right">${x.d.tur==='Çift'?'Çift kaydı · bireysel seans için ayrı kayıt doğru':'Bireysel kayıt · çift seansı için ayrı kayıt doğru'}</span>`:`<button type="button" class="btn sm" data-act="benzerSec" data-id="${x.d.id}">Bu kişi</button>`}</div>`}).join('')}</div>`:''})()}
+        ${did?'':(()=>{const bz=benzerDanisanlar(ad,[tel,tur==='Çift'&&val('r_es_tel'),cocuk&&val('r_anne_tel'),cocuk&&val('r_baba_tel')]);const uyumlu=bz.filter(x=>turGrup(x.d.tur)===turGrup(tur));return bz.length?`<div class="cmsg ${uyumlu.length?'err':'warn'}" style="flex-direction:column;align-items:stretch;gap:6px">${uyumlu.length?'<span><b>Bu kişi zaten kayıtlı olabilir.</b> Aynı kişiyse kaydı seçin; seans geçmişi tek kartta kalsın. Farklı biriyse (ör. aynı numarayı kullanan kardeş) yeni kayıt olarak devam edin.</span>':`<span>Bu kişi başka türde bir kayıtta da geçiyor (ör. çift kaydı veya çocuğun velisi olarak). ${tur} seansları için ayrı kayıt açılacak; mevcut kayıt ve seansları değişmez.</span>`}
+          ${bz.slice(0,5).map(x=>{const uyumsuz=turGrup(x.d.tur)!==turGrup(tur);return`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span><b>${esc(x.d.ad)}${x.d.tur==='Çift'&&x.d.es?' &amp; '+esc(x.d.es.ad):''}</b> <span class="small">${x.neden} · ${x.d.tur||''} · ${toplamSeans(x.d)} seans</span></span>${uyumsuz?`<span class="small" style="max-width:180px;text-align:right">${esc(x.d.tur||'')} kaydı · ${esc(tur)} seansı için ayrı kayıt doğru</span>`:`<button type="button" class="btn sm" data-act="benzerSec" data-id="${x.d.id}">Bu kişi</button>`}</div>`}).join('')}</div>`:''})()}
         ${ozet([['Danışan',`<b>${esc(ad)}</b>${did?'':' <span class="badge b-bekliyor">Yeni kayıt</span>'}${tur==='Çift'&&val('r_es_ad')?` · ${esc(val('r_es_ad'))}`:''}`],['Seans türü',esc(tur)],
           ['Kaynak',esc(KAYNAK[kaynak]||'')+(fid&&F(fid)?' · '+esc(F(fid).ad):'')],['Tarih',`<b>${tamTarih(tarih)}</b>`],['Saat',`<b>${saat}</b>`],
           ['Uzman',esc(u.ad)],['Şube',esc(B(sub).ad)],['Oda',esc(o?o.ad:'')+(o&&onlineMi({odaId:oda})?' · online':'')],['SMS',smsOzet(uz,istiyor,ali)]])}`,
