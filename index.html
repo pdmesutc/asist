@@ -1295,19 +1295,21 @@ function formKontrol(){
 }
 /* Bir kayıttaki kişiler (çiftteki eş, çocuğun anne/babası) kendi seansları için AYRI kayıt kullanır; asıl kayıt değişmez.
    Tür grupları: Çift · Çocuk/Ergen · Yetişkin. Aynı grup içinde (ör. Çocuk → Ergen) kayıt aynı kalır. */
-const turGrup=t=>t==='Çift'?'cift':(t==='Çocuk'||t==='Ergen')?'cocuk':'yetiskin';
-const KISI_AD={ana:'',es:'',anne:'Anne',baba:'Baba'};
+const turGrup=t=>!t?'':t==='Çift'?'cift':(t==='Çocuk'||t==='Ergen')?'cocuk':'yetiskin';
+const grupFarkli=(a,b)=>!!turGrup(a)&&!!turGrup(b)&&turGrup(a)!==turGrup(b);
+const KISI_AD={ana:'',es:'',anne:'Anne',baba:'Baba',veli:'Veli'};
 function kisiAl(d,k){const x=k==='ana'?d:d[k];return x&&x.ad?{ad:x.ad,tel:x.tel||''}:null}
 // Kayıttan başka kişiler için seçenekler: [anahtar, etiket, hedef tür]
 function kisiSecenekleri(d){const o=[];
   if(d.tur==='Çift'&&d.es&&d.es.ad){o.push(['ana',d.ad,'Yetişkin']);o.push(['es',d.es.ad,'Yetişkin'])}
+  if(d.veli&&d.veli.ad&&!d.anne&&!d.baba&&turGrup(d.tur)!=='cift')o.push(['veli',`Veli ${d.veli.ad}`,'Yetişkin']);
   if(turGrup(d.tur)==='cocuk'){['anne','baba'].forEach(k=>{const x=kisiAl(d,k);if(x)o.push([k,`${KISI_AD[k]} ${x.ad}`,'Yetişkin'])});
     if(kisiAl(d,'anne')&&kisiAl(d,'baba'))o.push(['ebeveyn',`${d.anne.ad} & ${d.baba.ad}`,'Çift'])}
   return o}
 function hedefKayit(d,k){if(k==='ebeveyn'){const a=d.anne,b=d.baba;const n=adNorm(a.ad),m=adNorm(b.ad);
     return S.danisanlar.find(x=>x.id!==d.id&&x.tur==='Çift'&&!x.anonim&&x.es&&((adNorm(x.ad)===n&&adNorm(x.es.ad)===m)||(adNorm(x.ad)===m&&adNorm(x.es.ad)===n)))||null}
   const p=kisiAl(d,k);if(!p)return null;const n=adNorm(p.ad),t=digits(p.tel).slice(-10);
-  return S.danisanlar.find(x=>x.id!==d.id&&x.tur!=='Çift'&&turGrup(x.tur)==='yetiskin'&&!x.anonim&&adNorm(x.ad)===n&&(!t||digits(x.tel).slice(-10)===t))||null}
+  return S.danisanlar.find(x=>x.id!==d.id&&x.tur!=='Çift'&&turGrup(x.tur)!=='cocuk'&&!x.anonim&&adNorm(x.ad)===n&&(!t||digits(x.tel).slice(-10)===t))||null}
 const bireyselKayit=hedefKayit;
 function turSec(t){const r=document.querySelector(`input[name="r_tur"][value="${t}"]`);if(r){r.checked=true;turBloklari()}}
 function bireyselSecUygula(kayitId,k){const d=D(kayitId);if(!d)return;const sec=kisiSecenekleri(d).find(x=>x[0]===k);if(!sec)return;const hedefTur=sec[2];
@@ -2252,7 +2254,7 @@ const A={
   bireyselSec(d){const l=$('#acList');if(l)l.hidden=true;bireyselSecUygula(d.id,d.k)},
   acTemizle(){RS.ciftKaynak=null;$('#r_did').value='';$('#r_secili').hidden=true;$('#acWrap').hidden=false;RS.oneri=null;const on=$('#r_oneri');if(on)on.innerHTML='';['r_ad','r_tel','r_es_ad','r_es_tel','r_anne_ad','r_anne_tel','r_baba_ad','r_baba_tel','r_ara'].forEach(i=>{const e=$('#'+i);if(e)e.value=''});const ar=$('#r_ara');if(ar)ar.focus()},
   turDegis(){const d=val('r_did')&&D(val('r_did'));const t=rTur();
-    if(d&&turGrup(d.tur)!==turGrup(t)){const sec=$('#r_secili');const se=kisiSecenekleri(d).filter(x=>turGrup(x[2])===turGrup(t));
+    if(d&&grupFarkli(d.tur,t)){const sec=$('#r_secili');const se=kisiSecenekleri(d).filter(x=>turGrup(x[2])===turGrup(t));
       const baslik=d.tur==='Çift'&&d.es?`${esc(d.ad)} &amp; ${esc(d.es.ad)} bir çift kaydı.`:`${esc(d.ad)} bir ${d.tur.toLocaleLowerCase('tr')} kaydı.`;
       if(se.length){sec.innerHTML=`<div class="secili" style="flex-direction:column;align-items:stretch;gap:8px"><span><b>${baslik}</b> ${t==='Çift'?'Çift seansı':'Bireysel seans'} kimin için?</span><span style="display:flex;gap:8px;flex-wrap:wrap">${se.map(([k,et])=>`<button type="button" class="btn sm primary" data-act="bireyselSec" data-id="${d.id}" data-k="${k}">${esc(et)}</button>`).join('')}<button type="button" class="btn sm" data-act="acTemizle">Başka danışan</button></span></div>`}
       else{$('#r_did').value='';sec.innerHTML=`<div class="secili"><div class="grow"><b>${esc(d.ad)}</b><span class="small muted">${t} seansı için yeni kayıt açılacak; ${esc(d.ad)} adlı ${d.tur.toLocaleLowerCase('tr')} kaydı ve seansları değişmez. Bilgileri aşağıda kontrol edin.</span></div><button type="button" class="btn sm" data-act="acTemizle">Değiştir</button></div>`}}
@@ -2289,13 +2291,13 @@ const A={
     if(!uz){toast('Uzman seçin.',1);const l=$('#r_uzmanlar');if(l)l.scrollIntoView({block:'center',behavior:'smooth'});return}
     const e=cakisma({tarih,saat,uzmanId:uz,odaId:oda,subeId:sub,danisanId:val('r_did')});if(e.length){toast(e[0],1);formKontrol();$('#r_msg').scrollIntoView({block:'center',behavior:'smooth'});return}
     const kaynak=rKaynak();let did=val('r_did');let d=did?D(did):null;const fid=kaynak==='firma'?val('r_firma'):null;
-    if(d&&turGrup(d.tur)!==turGrup(tur)){d=null;did='';$('#r_did').value=''}
+    if(d&&grupFarkli(d.tur,tur)){d=null;did='';$('#r_did').value=''}
     if(kaynak==='firma'&&!fid){toast('Firma seçin.',1);$('#r_firma').focus();return}
     if(!A._rOnay){const u=U(uz),o=O(oda);const ali=[['sms_ana',tel||(!cocuk?'':'')],['sms_es',tur==='Çift'&&val('r_es_tel')],['sms_anne',cocuk&&val('r_anne_tel')],['sms_baba',cocuk&&val('r_baba_tel')]].filter(([i,t])=>$('#'+i)&&chk(i)&&t).length;
       const istiyor=['sms_ana','sms_es','sms_anne','sms_baba'].some(i=>$('#'+i)&&chk(i));
       sheet('Randevuyu onaylayın',`<p class="small muted" style="margin:0">Bilgileri kontrol edin. Onayladığınızda randevu oluşturulur${u.sms?' ve SMS’ler gönderilir':''}.</p>
-        ${did?'':(()=>{const bz=benzerDanisanlar(ad,[tel,tur==='Çift'&&val('r_es_tel'),cocuk&&val('r_anne_tel'),cocuk&&val('r_baba_tel')]);const uyumlu=bz.filter(x=>turGrup(x.d.tur)===turGrup(tur));return bz.length?`<div class="cmsg ${uyumlu.length?'err':'warn'}" style="flex-direction:column;align-items:stretch;gap:6px">${uyumlu.length?'<span><b>Bu kişi zaten kayıtlı olabilir.</b> Aynı kişiyse kaydı seçin; seans geçmişi tek kartta kalsın. Farklı biriyse (ör. aynı numarayı kullanan kardeş) yeni kayıt olarak devam edin.</span>':`<span>Bu kişi başka türde bir kayıtta da geçiyor (ör. çift kaydı veya çocuğun velisi olarak). ${tur} seansları için ayrı kayıt açılacak; mevcut kayıt ve seansları değişmez.</span>`}
-          ${bz.slice(0,5).map(x=>{const uyumsuz=turGrup(x.d.tur)!==turGrup(tur);return`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span><b>${esc(x.d.ad)}${x.d.tur==='Çift'&&x.d.es?' &amp; '+esc(x.d.es.ad):''}</b> <span class="small">${x.neden} · ${x.d.tur||''} · ${toplamSeans(x.d)} seans</span></span>${uyumsuz?`<span class="small" style="max-width:180px;text-align:right">${esc(x.d.tur||'')} kaydı · ${esc(tur)} seansı için ayrı kayıt doğru</span>`:`<button type="button" class="btn sm" data-act="benzerSec" data-id="${x.d.id}">Bu kişi</button>`}</div>`}).join('')}</div>`:''})()}
+        ${did?'':(()=>{const bz=benzerDanisanlar(ad,[tel,tur==='Çift'&&val('r_es_tel'),cocuk&&val('r_anne_tel'),cocuk&&val('r_baba_tel')]);const uyumlu=bz.filter(x=>!grupFarkli(x.d.tur,tur));return bz.length?`<div class="cmsg ${uyumlu.length?'err':'warn'}" style="flex-direction:column;align-items:stretch;gap:6px">${uyumlu.length?'<span><b>Bu kişi zaten kayıtlı olabilir.</b> Aynı kişiyse kaydı seçin; seans geçmişi tek kartta kalsın. Farklı biriyse (ör. aynı numarayı kullanan kardeş) yeni kayıt olarak devam edin.</span>':`<span>Bu kişi başka türde bir kayıtta da geçiyor (ör. çift kaydı veya çocuğun velisi olarak). ${tur} seansları için ayrı kayıt açılacak; mevcut kayıt ve seansları değişmez.</span>`}
+          ${bz.slice(0,5).map(x=>{const uyumsuz=grupFarkli(x.d.tur,tur);return`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span><b>${esc(x.d.ad)}${x.d.tur==='Çift'&&x.d.es?' &amp; '+esc(x.d.es.ad):''}</b> <span class="small">${x.neden} · ${x.d.tur||''} · ${toplamSeans(x.d)} seans</span></span>${uyumsuz?`<span class="small" style="max-width:180px;text-align:right">${esc(x.d.tur||'')} kaydı · ${esc(tur)} seansı için ayrı kayıt doğru</span>`:`<button type="button" class="btn sm" data-act="benzerSec" data-id="${x.d.id}">Bu kişi</button>`}</div>`}).join('')}</div>`:''})()}
         ${ozet([['Danışan',`<b>${esc(ad)}</b>${did?'':' <span class="badge b-bekliyor">Yeni kayıt</span>'}${tur==='Çift'&&val('r_es_ad')?` · ${esc(val('r_es_ad'))}`:''}`],['Seans türü',esc(tur)],
           ['Kaynak',esc(KAYNAK[kaynak]||'')+(fid&&F(fid)?' · '+esc(F(fid).ad):'')],['Tarih',`<b>${tamTarih(tarih)}</b>`],['Saat',`<b>${saat}</b>`],
           ['Uzman',esc(u.ad)],['Şube',esc(B(sub).ad)],['Oda',esc(o?o.ad:'')+(o&&onlineMi({odaId:oda})?' · online':'')],['SMS',smsOzet(uz,istiyor,ali)]])}`,
