@@ -377,6 +377,8 @@ table.cal{border-collapse:separate;border-spacing:0;min-width:100%}
 .ol-satir:last-child{border-bottom:0}.ol-satir.uyari{background:color-mix(in srgb,var(--warn) 9%,transparent)}.ol-satir.uyari b{color:var(--warn)}
 .ol-o{display:flex;flex-direction:column;min-width:0;gap:2px}.ol-o .small{overflow-wrap:anywhere}.ol-c{text-align:right;line-height:1.35}
 @media (max-width:640px){.ol-satir{grid-template-columns:62px minmax(0,1fr)}.ol-c{grid-column:2;text-align:left}}
+.nw{white-space:nowrap}
+.dsira{display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--muted);white-space:nowrap}.dsira select{width:auto;min-width:0}
 .cell-cok{display:flex;flex-direction:column;gap:3px}
 .cell-cok .cell{min-height:40px}
 .cell-say{font-size:.68rem;font-weight:700;color:var(--accent);text-align:center}
@@ -836,6 +838,12 @@ idx();
 
 function sayac(){ if(_cnt)return _cnt; _cnt={};S.seanslar.forEach(s=>{if(s.durum!=='iptal')_cnt[s.danisanId]=(_cnt[s.danisanId]||0)+1});return _cnt}
 const toplamSeans=d=>(d.arsiv||0)+(sayac()[d.id]||0);
+/* Danışan listesi sıralaması: son görüşme (varsayılan), A–Z, en çok seans */
+const DSIRA=[['son','Son görüşme'],['ad','A–Z'],['seans','En çok seans']];
+function sonGorusme(uzmanId){const m={};S.seanslar.forEach(s=>{if(s.durum==='iptal'||s.tarih>TODAY||(uzmanId&&s.uzmanId!==uzmanId))return;if(!m[s.danisanId]||s.tarih>m[s.danisanId])m[s.danisanId]=s.tarih});return m}
+function dSirala(list,sira,uzmanId){if(sira==='ad')return list;const son=sira==='son'?sonGorusme(uzmanId):null;
+  return[...list].sort(sira==='son'?(a,b)=>(son[b.id]||'').localeCompare(son[a.id]||'')||a.ad.localeCompare(b.ad,'tr'):(a,b)=>toplamSeans(b)-toplamSeans(a)||a.ad.localeCompare(b.ad,'tr'))}
+const dSiraSec=(act,v)=>`<label class="dsira"><span>Sırala</span><select class="inp" data-chg="${act}" aria-label="Danışan sıralaması">${DSIRA.map(([k,l])=>`<option value="${k}" ${v===k?'selected':''}>${l}</option>`).join('')}</select></label>`;
 function sorted(){if(!_sorted)_sorted=[...S.danisanlar].sort((a,b)=>a.ad.localeCompare(b.ad,'tr'));return _sorted}
 function oran(s){const u=U(s.uzmanId);return s.kaynak==='kendi'?u.oranKendi:u.oranYonlendirme}
 function sonKaynak(d){const l=S.seanslar.filter(x=>x.danisanId===d.id&&x.durum!=='iptal').sort((a,b)=>(b.tarih+b.saat).localeCompare(a.tarih+a.saat));
@@ -1289,18 +1297,18 @@ function rInit(){const p=UI.prefill||{};UI.prefill=null;
 function vDanisanlar(){UI.dk=UI.dk||'sube';
   return`<div class="page-head"><div><h1>Danışanlar</h1><p>${S.danisanlar.length.toLocaleString('tr-TR')} kayıt${S.kaynakDosya?'':' · 2023–2025 arşivi ve güncel seanslar birlikte sayılır'}</p></div><button class="btn primary" data-act="go" data-v="randevu">${ic('plus')}Yeni randevu</button></div>
   <div class="toolbar"><div class="search">${ic('search')}<input id="dq" placeholder="Ad, telefon veya veli adı ile ara" value="${esc(UI.dq||'')}" data-in="dAra" aria-label="Danışan ara"></div>
-  <div class="seg"><button class="${UI.dk==='sube'?'on':''}" data-act="dKapsam" data-v="sube">Sadece bu şube</button><button class="${UI.dk==='tum'?'on':''}" data-act="dKapsam" data-v="tum">Tüm şubeler</button></div></div>
+  <div class="seg"><button class="${UI.dk==='sube'?'on':''}" data-act="dKapsam" data-v="sube">Sadece bu şube</button><button class="${UI.dk==='tum'?'on':''}" data-act="dKapsam" data-v="tum">Tüm şubeler</button></div>${dSiraSec('dSira',UI.dsira||'son')}</div>
   <div id="dList">${dListHTML()}</div>`}
 function dFiltre(list,q){if(!q)return list;const ql=low(q),qd=digits(q);
   return list.filter(d=>low(d.ad).includes(ql)||(qd.length>=3&&(digits(d.tel).includes(qd)||(d.anne&&digits(d.anne.tel).includes(qd))||(d.baba&&digits(d.baba.tel).includes(qd))||(d.es&&digits(d.es.tel).includes(qd))))||(d.anne&&low(d.anne.ad).includes(ql))||(d.baba&&low(d.baba.ad).includes(ql))||(d.es&&low(d.es.ad).includes(ql))||(d.veli&&(low(d.veli.ad).includes(ql)||(qd.length>=3&&digits(d.veli.tel).includes(qd)))))}
 function hl(t,q){if(!q||q.length<2)return esc(t);const i=low(t).indexOf(low(q));if(i<0)return esc(t);return esc(t.slice(0,i))+'<mark>'+esc(t.slice(i,i+q.length))+'</mark>'+esc(t.slice(i+q.length))}
 // Psikolog telefon görme izni kapalıyken bile kendi getirdiği danışanların numarasını görür
 const telGorur=(d,u)=>!u||u.telGor||d.sahipUzmanId===u.id||S.seanslar.some(s=>s.danisanId===d.id&&s.uzmanId===u.id&&s.kaynak==='kendi');
-function dRows(list,q,act,maskTel){return list.map(d=>`<button class="row t-${TK[d.tur]}" data-act="${act}" data-id="${d.id}"><span class="av">${ini(d.ad)}</span><span style="min-width:0"><span class="nm"><span class="ad-n">${kvkkBas(d)}${hl(d.ad,q)}</span>${d.firmaId?`<span class="badge b-firma">${esc(F(d.firmaId).ad)}</span>`:''}</span><span class="mt">${maskTel&&!telGorur(d,maskTel)?'Telefon gizli':esc(d.tel)} · ${d.tur?d.tur+' · ':''}${esc(B(d.subeId).ad)}</span></span><span class="cnt">${toplamSeans(d)}<small>seans</small></span></button>`).join('')}
-function dListHTML(){const q=UI.dq||'';let list=sorted();if(UI.dk!=='tum')list=list.filter(d=>d.subeId===UI.subeId);list=dFiltre(list,q);
+function dRows(list,q,act,maskTel,son){return list.map(d=>`<button class="row t-${TK[d.tur]}" data-act="${act}" data-id="${d.id}"><span class="av">${ini(d.ad)}</span><span style="min-width:0"><span class="nm"><span class="ad-n">${kvkkBas(d)}${hl(d.ad,q)}</span>${d.firmaId?`<span class="badge b-firma">${esc(F(d.firmaId).ad)}</span>`:''}</span><span class="mt">${maskTel&&!telGorur(d,maskTel)?'Telefon gizli':esc(d.tel)} · ${d.tur?d.tur+' · ':''}${esc(B(d.subeId).ad)}${son&&son[d.id]?` · <span class="nw">son: ${fmtD(son[d.id],{day:'numeric',month:'short',year:'numeric'})}</span>`:''}</span></span><span class="cnt">${toplamSeans(d)}<small>seans</small></span></button>`).join('')}
+function dListHTML(){const q=UI.dq||'';const sira=UI.dsira||'son';let list=sorted();if(UI.dk!=='tum')list=list.filter(d=>d.subeId===UI.subeId);list=dSirala(dFiltre(list,q),sira);const son=sonGorusme();
   const per=50,pages=Math.max(1,Math.ceil(list.length/per));UI.dp=Math.min(UI.dp||0,pages-1);const st=UI.dp*per;
   if(!list.length)return`<div class="empty"><b>Sonuç bulunamadı</b>“${esc(q)}” ile eşleşen danışan yok. Yeni randevu formundan kayıt oluşturabilirsiniz.</div>`;
-  return`<div class="dl">${dRows(list.slice(st,st+per),q,'danisanDetay')}</div>
+  return`<div class="dl">${dRows(list.slice(st,st+per),q,'danisanDetay',null,son)}</div>
   <div class="pager"><span class="num kayit">${(st+1).toLocaleString('tr-TR')}–${Math.min(st+per,list.length).toLocaleString('tr-TR')} / ${list.length.toLocaleString('tr-TR')} kayıt</span><span class="psayfa"><button class="btn sm" data-act="dSayfa" data-v="-1" ${UI.dp===0?'disabled':''}>${ic('l')}Önceki</button><span class="num">Sayfa ${UI.dp+1} / ${pages}</span><button class="btn sm" data-act="dSayfa" data-v="1" ${UI.dp>=pages-1?'disabled':''}>Sonraki${ic('r')}</button></span></div>`}
 function danisanDetay(id,psk){const d=D(id);const self=psk?U(UI.uzmanId):null;
   let ses=S.seanslar.filter(s=>s.danisanId===id&&s.durum!=='iptal');if(psk)ses=ses.filter(s=>s.uzmanId===self.id);
@@ -1518,11 +1526,11 @@ function vAjanda(){UI.aj=UI.aj||'gun';const u=U(UI.uzmanId);const t=UI.ajT||TODA
 function benimDanisanlar(){const ids=new Set(S.seanslar.filter(s=>s.uzmanId===UI.uzmanId).map(s=>s.danisanId));S.danisanlar.forEach(d=>{if(d.sahipUzmanId===UI.uzmanId)ids.add(d.id)});return sorted().filter(d=>ids.has(d.id))}
 function vDanisanlarim(){const all=benimDanisanlar();
   return`<div class="page-head"><div><h1>Danışanlar</h1><p>Yalnızca sizinle görüşmesi olan ${all.length} danışan görüntülenir.</p></div></div>
-  <div class="search">${ic('search')}<input id="pq" placeholder="Danışan ara" value="${esc(UI.pq||'')}" data-in="pAra" aria-label="Danışan ara"></div><div id="pList">${pListHTML()}</div>`}
-function pListHTML(){const q=UI.pq||'';const u=U(UI.uzmanId);const list=dFiltre(benimDanisanlar(),q);const per=50,pages=Math.max(1,Math.ceil(list.length/per));
+  <div class="toolbar"><div class="search">${ic('search')}<input id="pq" placeholder="Danışan ara" value="${esc(UI.pq||'')}" data-in="pAra" aria-label="Danışan ara"></div>${dSiraSec('pSira',UI.psira||'son')}</div><div id="pList">${pListHTML()}</div>`}
+function pListHTML(){const q=UI.pq||'';const u=U(UI.uzmanId);const son=sonGorusme(UI.uzmanId);const list=dSirala(dFiltre(benimDanisanlar(),q),UI.psira||'son',UI.uzmanId);const per=50,pages=Math.max(1,Math.ceil(list.length/per));
   UI.pp=Math.min(Math.max(0,UI.pp||0),pages-1);const st=UI.pp*per;
   if(!list.length)return'<div class="empty"><b>Danışan bulunamadı</b></div>';
-  return`<div class="dl">${dRows(list.slice(st,st+per),q,'pDanisan',u.telGor?null:u)}</div>
+  return`<div class="dl">${dRows(list.slice(st,st+per),q,'pDanisan',u.telGor?null:u,son)}</div>
   ${pages>1?`<div class="pager"><span class="num kayit">${(st+1).toLocaleString('tr-TR')}–${Math.min(st+per,list.length).toLocaleString('tr-TR')} / ${list.length.toLocaleString('tr-TR')} kayıt</span><span class="psayfa"><button class="btn sm" data-act="pSayfa" data-v="-1" ${UI.pp===0?'disabled':''}>${ic('l')}Önceki</button><span class="num">Sayfa ${UI.pp+1} / ${pages}</span><button class="btn sm" data-act="pSayfa" data-v="1" ${UI.pp>=pages-1?'disabled':''}>Sonraki${ic('r')}</button></span></div>`:''}`}
 function vHakedis(){const u=U(UI.uzmanId);if(!UI._hkSet){UI.per={tip:'ay',ref:TODAY};UI._hkSet=1}const[b,e]=perRange();
   const k=kasa(null,b,e,u.id);
@@ -2223,6 +2231,8 @@ const A={
     commit();scrollTo(0,0);toast(`Randevu oluşturuldu · ${fmtD(tarih)} ${saat}${smsNot(s,n)}`)},
   dAra(d,el){UI.dq=el.value;UI.dp=0;$('#dList').innerHTML=dListHTML()},
   dKapsam(d){UI.dk=d.v;UI.dp=0;render()},
+  dSira(d,el){UI.dsira=el.value;UI.dp=0;$('#dList').innerHTML=dListHTML()},
+  pSira(d,el){UI.psira=el.value;UI.pp=0;$('#pList').innerHTML=pListHTML()},
   dSayfa(d){UI.dp=(UI.dp||0)+(+d.v);$('#dList').innerHTML=dListHTML();$('#dq').scrollIntoView({block:'start',behavior:'smooth'})},
   danisanDetay(d){danisanDetay(d.id,aktifRol()==='psikolog')},
   pDanisan(d){danisanDetay(d.id,true)},
