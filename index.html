@@ -381,6 +381,14 @@ table.cal{border-collapse:separate;border-spacing:0;min-width:100%}
 .nw{white-space:nowrap}
 .dsira{display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--muted);white-space:nowrap}.dsira select{width:auto;min-width:0}
 .badge.b-ilk{background:#FCEBEB;color:#A32D2D;border:1px solid #F7C1C1;font-size:.72rem;vertical-align:middle;white-space:nowrap}
+.bag-bolum{display:flex;flex-direction:column;gap:8px}
+.bag-liste,.bag-oneri{display:flex;flex-direction:column;gap:6px}
+.bag-oneri{border:1px dashed var(--line);border-radius:10px;padding:8px 10px}
+.bag-satir{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.bag-satir .grow{flex:1;min-width:0}
+.bag-ad{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left;background:none;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit;color:inherit;cursor:pointer}
+.bag-ad small{color:var(--muted);font-size:.72rem}
+.bag-roller{display:flex;flex-wrap:wrap;gap:8px}
 .ac-alt{padding-left:22px!important;background:var(--bg2,transparent)}
 .cell-cok{display:flex;flex-direction:column;gap:3px}
 .cell-cok .cell{min-height:40px}
@@ -1313,15 +1321,15 @@ function hedefKayit(d,k){if(k==='ebeveyn'){const a=d.anne,b=d.baba;const n=adNor
 const bireyselKayit=hedefKayit;
 function turSec(t){const r=document.querySelector(`input[name="r_tur"][value="${t}"]`);if(r){r.checked=true;turBloklari()}}
 function bireyselSecUygula(kayitId,k){const d=D(kayitId);if(!d)return;const sec=kisiSecenekleri(d).find(x=>x[0]===k);if(!sec)return;const hedefTur=sec[2];
-  const var_=hedefKayit(d,k);if(var_){acSecId(var_.id);if(turGrup(rTur())!==turGrup(hedefTur)){turSec(hedefTur);formYenile()}return}
+  const var_=hedefKayit(d,k);if(var_){acSecId(var_.id);RS.bagKaynak={id:kayitId,k};if(turGrup(rTur())!==turGrup(hedefTur)){turSec(hedefTur);formYenile()}return}
   A.acTemizle();turSec(hedefTur);
   if(k==='ebeveyn'){$('#r_ad').value=d.anne.ad;$('#r_tel').value=d.anne.tel||'';$('#r_es_ad').value=d.baba.ad;$('#r_es_tel').value=d.baba.tel||'';$('#sms_ana').checked=true;const se=$('#sms_es');if(se)se.checked=!!d.baba.tel}
   else{const p=kisiAl(d,k);$('#r_ad').value=p.ad;$('#r_tel').value=p.tel;$('#sms_ana').checked=true}
-  $('#acWrap').hidden=true;const kutu=$('#r_secili');kutu.hidden=false;RS.ciftKaynak=kayitId;
+  $('#acWrap').hidden=true;const kutu=$('#r_secili');kutu.hidden=false;RS.ciftKaynak=kayitId;RS.bagKaynak={id:kayitId,k};
   const asil=d.tur==='Çift'&&d.es?`${esc(d.ad)} &amp; ${esc(d.es.ad)} çift kaydından`:`${esc(d.ad)} (${d.tur}) kaydından`;
   kutu.innerHTML=`<div class="secili"><div class="grow"><b>${esc(sec[1])}</b><span class="small muted">Yeni ${hedefTur==='Çift'?'çift':'bireysel'} kayıt · ${asil}. Asıl kayıt ve seansları değişmez.</span></div><button type="button" class="btn sm" data-act="acTemizle">Değiştir</button></div>`;
   telAlanlariniKontrolEt();formYenile()}
-function acSecId(id){const d=D(id);if(!d)return;RS.ciftKaynak=null;
+function acSecId(id){const d=D(id);if(!d)return;RS.ciftKaynak=null;RS.bagKaynak=null;
   $('#r_did').value=id;$('#acWrap').hidden=true;const sec=$('#r_secili');sec.hidden=false;
   sec.innerHTML=`<div class="secili"><div class="grow"><b>${esc(d.ad)}</b><span class="small muted">${esc(d.tel)} · ${esc(B(d.subeId).ad)} · ${toplamSeans(d)} seans${d.firmaId&&F(d.firmaId)?' · '+esc(F(d.firmaId).ad):''}</span></div><button type="button" class="btn sm" data-act="acTemizle">Değiştir</button></div>`;
   const r=document.querySelector(`input[name="r_tur"][value="${d.tur}"]`);if(r)r.checked=true;turBloklari();
@@ -1360,6 +1368,39 @@ function dListHTML(){const q=UI.dq||'';const sira=UI.dsira||'son';let list=sorte
   if(!list.length)return`<div class="empty"><b>Sonuç bulunamadı</b>“${esc(q)}” ile eşleşen danışan yok. Yeni randevu formundan kayıt oluşturabilirsiniz.</div>`;
   return`<div class="dl">${dRows(list.slice(st,st+per),q,'danisanDetay',null,son)}</div>
   <div class="pager"><span class="num kayit">${(st+1).toLocaleString('tr-TR')}–${Math.min(st+per,list.length).toLocaleString('tr-TR')} / ${list.length.toLocaleString('tr-TR')} kayıt</span><span class="psayfa"><button class="btn sm" data-act="dSayfa" data-v="-1" ${UI.dp===0?'disabled':''}>${ic('l')}Önceki</button><span class="num">Sayfa ${UI.dp+1} / ${pages}</span><button class="btn sm" data-act="dSayfa" data-v="1" ${UI.dp>=pages-1?'disabled':''}>Sonraki${ic('r')}</button></span></div>`}
+/* ============ Aile / yakın bağlantıları ============
+   d.bag = [{id, rol}] → "id, d'nin <rol>u". Bağlantı iki kayda da (ters rolüyle) yazılır. */
+const BAG_ROL={es:['Eşi / partneri','es'],anne:['Annesi','cocuk'],baba:['Babası','cocuk'],veli:['Velisi','cocuk'],cocuk:['Çocuğu','ebeveyn'],ebeveyn:['Anne / babası','cocuk'],
+  kardes:['Kardeşi','kardes'],cift:['Çift kaydı','ciftUye'],ciftUye:['Çift kaydındaki kişi','cift'],ebeveynCift:['Anne-baba çift kaydı','cocuk'],diger:['Yakını','diger']};
+const BAG_SECIM=['es','anne','baba','cocuk','kardes','cift','diger'];
+function bagListe(d){return(d&&d.bag||[]).filter(x=>D(x.id)&&BAG_ROL[x.rol])}
+function bagVar(a,b){return!!(a.bag||[]).find(x=>x.id===b.id)}
+function bagKur(a,b,rol){if(!a||!b||a.id===b.id||!BAG_ROL[rol])return false;
+  a.bag=(a.bag||[]).filter(x=>x.id!==b.id);b.bag=(b.bag||[]).filter(x=>x.id!==a.id);
+  a.bag.push({id:b.id,rol});b.bag.push({id:a.id,rol:BAG_ROL[rol][1]});return true}
+function bagKopar(a,b){if(a)a.bag=(a.bag||[]).filter(x=>x.id!==b.id);if(b)b.bag=(b.bag||[]).filter(x=>x.id!==a.id)}
+// Kayıtlardaki eş/anne/baba/veli bilgisi ve ortak telefondan olası yakınlar (yalnızca öneri; otomatik bağlanmaz)
+function bagOneri(d){if(!d||d.anonim)return[];const o=new Map();const tk=t=>digits(t).slice(-10);
+  const kisiler=k=>[['es',k.es],['anne',k.anne],['baba',k.baba],['veli',k.veli]].filter(([,p])=>p&&p.ad);
+  const ekle=(x,rol,neden)=>{if(x.id===d.id||x.anonim||bagVar(d,x)||o.has(x.id))return;o.set(x.id,{d:x,rol,neden})};
+  S.danisanlar.forEach(x=>{if(x.id===d.id||x.anonim)return;const xn=adNorm(x.ad);
+    // d'nin kaydında adı geçen kişi x ise
+    kisiler(d).forEach(([r,p])=>{if(adNorm(p.ad)===xn&&xn.includes(' '))ekle(x,x.tur==='Çift'?'cift':r==='es'?'es':r,`bu kayıtta ${({es:'eş',anne:'anne',baba:'baba',veli:'veli'})[r]} olarak geçiyor`)});
+    // x'in kaydında d adı geçiyorsa
+    kisiler(x).forEach(([r,p])=>{if(adNorm(p.ad)===adNorm(d.ad)&&adNorm(d.ad).includes(' '))ekle(x,r==='es'?(x.tur==='Çift'?'cift':'es'):'cocuk',`${x.ad} kaydında adı geçiyor`)});
+    // ortak telefon
+    const dt=[d.tel,...kisiler(d).map(([,p])=>p.tel)].map(tk).filter(t=>t.length===10);
+    const xt=[x.tel,...kisiler(x).map(([,p])=>p.tel)].map(tk).filter(t=>t.length===10);
+    if(dt.some(t=>xt.includes(t)))ekle(x,adNorm(x.ad).split(' ').pop()===adNorm(d.ad).split(' ').pop()?'kardes':'diger','aynı telefon numarası')});
+  return[...o.values()].slice(0,6)}
+function bagBolum(d,psk){const l=bagListe(d);const on=psk?[]:bagOneri(d);if(psk&&!l.length)return'';
+  return`<div class="bag-bolum"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h3 style="margin:0">Aile / yakın bağlantıları</h3>${psk||d.anonim?'':`<button class="btn sm" data-act="bagAc" data-id="${d.id}">${ic('plus')}Bağla</button>`}</div>
+  ${l.length?`<div class="bag-liste">${l.map(x=>{const y=D(x.id);return`<div class="bag-satir"><button type="button" class="bag-ad" data-act="${psk?'pDanisan':'danisanDetay'}" data-id="${y.id}"><small>${BAG_ROL[x.rol][0]}</small><b>${kvkkNokta(y)}${esc(y.ad)}${y.tur==='Çift'&&y.es?' &amp; '+esc(y.es.ad):''}</b><span class="small muted">${y.tur||'Tür belirtilmemiş'} · ${toplamSeans(y)} seans</span></button>${psk?'':`<button class="btn sm ghost" data-act="bagSil" data-id="${d.id}" data-o="${y.id}" aria-label="Bağlantıyı kaldır">Kaldır</button>`}</div>`}).join('')}</div>`:`<div class="small muted">${psk?'':'Henüz bağlantı yok. Eşini, anne-babasını veya çocuğunu bağlayarak aile kayıtlarını birlikte görebilirsiniz.'}</div>`}
+  ${on.length?`<div class="bag-oneri"><span class="small"><b>Olası yakınlar</b> · kayıtlardan bulundu, kontrol edip bağlayın</span>${on.map(x=>`<div class="bag-satir"><span class="grow"><b>${esc(x.d.ad)}${x.d.tur==='Çift'&&x.d.es?' &amp; '+esc(x.d.es.ad):''}</b><span class="small muted" style="display:block">${esc(x.neden)} · ${x.d.tur||'tür yok'} · ${toplamSeans(x.d)} seans</span></span><button class="btn sm" data-act="bagRol" data-id="${d.id}" data-o="${x.d.id}" data-r="${x.rol}">Bağla</button></div>`).join('')}</div>`:''}</div>`}
+function bagRolSor(aId,bId,oner){const a=D(aId),b=D(bId);if(!a||!b)return;
+  sheet('Bağlantı türü',`<p style="margin:0"><b>${esc(b.ad)}${b.tur==='Çift'&&b.es?' &amp; '+esc(b.es.ad):''}</b>, <b>${esc(a.ad)}</b> için kim?</p>
+  <div class="bag-roller">${BAG_SECIM.map(r=>`<button type="button" class="btn ${r===oner?'primary':''}" data-act="bagYap" data-id="${aId}" data-o="${bId}" data-r="${r}">${BAG_ROL[r][0]}</button>`).join('')}</div>
+  <p class="small muted" style="margin:0">Bağlantı iki karta da eklenir. Kayıtlar birleşmez; seanslar ayrı kalır.</p>`,`<button class="btn" data-act="danisanDetay" data-id="${aId}">Geri</button>`)}
 function danisanDetay(id,psk){const d=D(id);const self=psk?U(UI.uzmanId):null;
   let ses=S.seanslar.filter(s=>s.danisanId===id&&s.durum!=='iptal');if(psk)ses=ses.filter(s=>s.uzmanId===self.id);
   ses.sort((a,b)=>(a.tarih+a.saat).localeCompare(b.tarih+b.saat));
@@ -1371,7 +1412,7 @@ function danisanDetay(id,psk){const d=D(id);const self=psk?U(UI.uzmanId):null;
   sheet(esc(d.ad),`${d.anonim?`<div class="small muted">Kişisel verileri ${fmtD(d.anonim,{day:'numeric',month:'long',year:'numeric'})} tarihinde silindi (KVKK).</div>`:''}<div class="chips">${tchip(d.tur)}<span class="badge b-pasif">${esc(B(d.subeId).ad)} şubesi</span>${d.firmaId&&F(d.firmaId)?`<span class="badge b-firma">${esc(F(d.firmaId).ad)}</span>`:''}${d.sahipUzmanId?`<span class="badge b-pasif">Kendi danışanı: ${esc(U(d.sahipUzmanId).ad)}</span>`:''}</div>
   <div class="kvkk-satir">${d.kvkk?`${kvkkNokta(d)}<span class="kvkk-yazi"><b>KVKK formu alındı</b><small class="muted">${fmtD(d.kvkk.t,{day:'numeric',month:'short',year:'numeric'})}${d.kvkk.k?' · '+esc(d.kvkk.k):''}</small></span><button class="btn sm ghost" data-act="kvkkDegis" data-id="${d.id}">Geri al</button>`
     :`<span class="kvkk-yok"></span><span class="kvkk-yazi"><b>KVKK formu işaretlenmedi</b></span>${d.anonim?'':`<button class="btn sm" data-act="kvkkDegis" data-id="${d.id}">Alındı</button>`}`}</div>
-  <div class="ccards">${d.tur!=='Çocuk'?`<div class="ccard"><small>Danışan</small><b>${esc(d.ad)}</b>${T(d.tel)}</div>`:''}${kart('Eş / partner',d.es)}${kart('Anne',d.anne)}${kart('Baba',d.baba)}${kart('Veli',d.veli)}</div>
+  <div class="ccards">${d.tur!=='Çocuk'?`<div class="ccard"><small>Danışan</small><b>${esc(d.ad)}</b>${T(d.tel)}</div>`:''}${kart('Eş / partner',d.es)}${kart('Anne',d.anne)}${kart('Baba',d.baba)}${kart('Veli',d.veli)}</div>${d.anonim?'':bagBolum(d,psk)}
   <div class="stats"><div class="stat"><span class="k">Toplam seans</span><span class="v">${ars+ses.length}</span><span class="d">${psk?'Sizinle yapılan':[ars?`Arşiv ${ars}`:'',nF?`Firma ${nF}`:'',`Ücretli ${uc.length}`].filter(Boolean).join(' + ')}</span></div>
   ${!psk&&nF?`<div class="stat"><span class="k">Firma kapsamında</span><span class="v">${nF}</span><span class="d">${esc(F(ses.find(s=>s.kaynak==='firma').firmaId).ad)} · ücretsiz</span></div>`:''}
   ${!psk&&uc.length?`<div class="stat"><span class="k">Ücretli seanslar</span><span class="v">${uc.length}</span><span class="d">Ödenen ${TL(odenen)}${bekleyen?` · bekleyen ${TL(bekleyen)}`:''}</span></div>`:''}<div class="stat"><span class="k">Son / sonraki</span><span class="v" style="font-size:1rem">${ses.length?fmtD(ses[ses.length-1].tarih,{day:'numeric',month:'short',year:'numeric'}):'—'}</span><span class="d">${ses.length?esc(U(ses[ses.length-1].uzmanId).ad):'Güncel seans yok'}</span></div></div>
@@ -2087,6 +2128,7 @@ const A={
     k.arsiv=(k.arsiv||0)+(x.arsiv||0);
     ['es','anne','baba','firmaId','sahipUzmanId'].forEach(f=>{if(!k[f]&&x[f])k[f]=x[f]});
     if(!k.tel&&x.tel)k.tel=x.tel;
+    bagListe(x).forEach(b=>{const y=D(b.id);bagKopar(x,y);if(y&&y.id!==k.id&&!bagVar(k,y))bagKur(k,y,b.rol)});
     (k.gecmis=k.gecmis||[]).push({z:new Date().toISOString(),k:rolAd[aktifRol()],i:`${x.ad} (${x.tel}) kaydı ile birleştirildi · ${n} seans aktarıldı`});
     S.danisanlar=S.danisanlar.filter(y=>y.id!==x.id);A._bs=null;
     commit();danisanDetay(k.id,false);toast(`Kayıtlar birleştirildi · ${n} seans aktarıldı.`)},
@@ -2132,6 +2174,17 @@ const A={
     else if(eski.uc!==uc)deg.push(`ücret ${TL(eski.uc)} → ${TL(uc)}`);
     if(deg.length)iz(s,'Düzenlendi: '+deg.join(', '));kapat();commit();toast(deg.length?'Seans güncellendi.':'Değişiklik yapılmadı.');pasifDon()},
   danisanDuz(d){danisanDuz(d.id)},
+  bagAc(d){const x=D(d.id);if(!x)return;sheet('Yakın bağla',`<p class="small muted" style="margin:0"><b>${esc(x.ad)}</b> ile bağlanacak danışanı arayın (ad veya telefon).</p>
+    <div class="search">${ic('search')}<input id="bag_ara" placeholder="Ad veya telefon" data-in="bagAra" data-id="${x.id}" autocomplete="off"></div><div id="bag_sonuc" class="bag-liste"></div>`,`<button class="btn" data-act="danisanDetay" data-id="${x.id}">Geri</button>`);setTimeout(()=>{const i=$('#bag_ara');if(i)i.focus()},50)},
+  bagAra(d,el){const q=el.value.trim();const box=$('#bag_sonuc');if(q.length<2){box.innerHTML='';return}const x=D(el.dataset.id);
+    const res=dFiltre(sorted(),q).filter(y=>y.id!==x.id&&!y.anonim).slice(0,8);
+    box.innerHTML=res.length?res.map(y=>`<div class="bag-satir"><span class="grow"><b>${hl(y.ad,q)}${y.tur==='Çift'&&y.es?' &amp; '+hl(y.es.ad,q):''}</b><span class="small muted" style="display:block">${y.tel?esc(y.tel)+' · ':''}${y.tur||'tür yok'} · ${esc(B(y.subeId)?B(y.subeId).ad:'')} · ${toplamSeans(y)} seans</span></span><button class="btn sm" data-act="bagRol" data-id="${x.id}" data-o="${y.id}" ${bagVar(x,y)?'disabled':''}>${bagVar(x,y)?'Bağlı':'Seç'}</button></div>`).join(''):'<div class="small muted">Sonuç yok.</div>'},
+  bagRol(d){bagRolSor(d.id,d.o,d.r)},
+  bagYap(d){const a=D(d.id),b=D(d.o);if(!bagKur(a,b,d.r))return;
+    (a.gecmis=a.gecmis||[]).push({z:new Date().toISOString(),k:rolAd[aktifRol()],i:`${b.ad} bağlandı (${BAG_ROL[d.r][0]})`});
+    commit();danisanDetay(a.id,false);toast(`${b.ad} bağlandı · ${BAG_ROL[d.r][0]}`)},
+  bagSil(d,el){if(!el.classList.contains('sure')){el.classList.add('sure');el.textContent='Emin misiniz?';setTimeout(()=>{if(el.isConnected){el.classList.remove('sure');el.textContent='Kaldır'}},3000);return}
+    const a=D(d.id),b=D(d.o);bagKopar(a,b);(a.gecmis=a.gecmis||[]).push({z:new Date().toISOString(),k:rolAd[aktifRol()],i:`${b?b.ad:''} bağlantısı kaldırıldı`});commit();danisanDetay(a.id,false);toast('Bağlantı kaldırıldı.')},
   ddTur(){const t=val('dd_tur');$('#dd_cift').hidden=t!=='Çift';$('#dd_coc').hidden=!(t==='Çocuk'||t==='Ergen')},
   danisanKaydet(d){const x=D(d.id);const ad=val('dd_ad'),tel=val('dd_tel'),tur=val('dd_tur');const coc=tur==='Çocuk'||tur==='Ergen';
     if(!ad){toast('Ad soyad boş olamaz.',1);return}
@@ -2252,7 +2305,7 @@ const A={
   acSec(d){const l=$('#acList');if(l)l.hidden=true;const t=$('#r_telInfo');if(t)t.hidden=true;acSecId(d.id)},
   acYeni(){const q=val('r_ara');$('#acList').hidden=true;if(/\d{4,}/.test(q)){$('#r_tel').value=normTel(q);telDurum($('#r_tel'))}else $('#r_ad').value=q;$('#r_ad').focus()},
   bireyselSec(d){const l=$('#acList');if(l)l.hidden=true;bireyselSecUygula(d.id,d.k)},
-  acTemizle(){RS.ciftKaynak=null;$('#r_did').value='';$('#r_secili').hidden=true;$('#acWrap').hidden=false;RS.oneri=null;const on=$('#r_oneri');if(on)on.innerHTML='';['r_ad','r_tel','r_es_ad','r_es_tel','r_anne_ad','r_anne_tel','r_baba_ad','r_baba_tel','r_ara'].forEach(i=>{const e=$('#'+i);if(e)e.value=''});const ar=$('#r_ara');if(ar)ar.focus()},
+  acTemizle(){RS.ciftKaynak=null;RS.bagKaynak=null;$('#r_did').value='';$('#r_secili').hidden=true;$('#acWrap').hidden=false;RS.oneri=null;const on=$('#r_oneri');if(on)on.innerHTML='';['r_ad','r_tel','r_es_ad','r_es_tel','r_anne_ad','r_anne_tel','r_baba_ad','r_baba_tel','r_ara'].forEach(i=>{const e=$('#'+i);if(e)e.value=''});const ar=$('#r_ara');if(ar)ar.focus()},
   turDegis(){const d=val('r_did')&&D(val('r_did'));const t=rTur();
     if(d&&grupFarkli(d.tur,t)){const sec=$('#r_secili');const se=kisiSecenekleri(d).filter(x=>turGrup(x[2])===turGrup(t));
       const baslik=d.tur==='Çift'&&d.es?`${esc(d.ad)} &amp; ${esc(d.es.ad)} bir çift kaydı.`:`${esc(d.ad)} bir ${d.tur.toLocaleLowerCase('tr')} kaydı.`;
@@ -2309,6 +2362,10 @@ const A={
     if(tur==='Çift')d.es=person('r_es_ad','r_es_tel');if(cocuk){d.anne=person('r_anne_ad','r_anne_tel');d.baba=person('r_baba_ad','r_baba_tel')}
     d.sms={ana:chk('sms_ana'),es:tur==='Çift'&&chk('sms_es'),anne:cocuk&&chk('sms_anne'),baba:cocuk&&chk('sms_baba')};
     if(fid)d.firmaId=fid;
+    if(RS.bagKaynak){const kaynakD=D(RS.bagKaynak.id),kk=RS.bagKaynak.k;RS.bagKaynak=null;
+      // kaynakD: çift kaydı / çocuk kaydı; d: o kayıttaki kişinin kendi kaydı
+      const rol=kk==='ana'||kk==='es'?'cift':kk==='ebeveyn'?'cocuk':'cocuk';
+      if(kaynakD&&kaynakD.id!==d.id&&!bagVar(d,kaynakD))bagKur(d,kaynakD,rol)}
     const s={id:uid('s'),danisanId:d.id,uzmanId:uz,subeId:sub,odaId:oda,tarih,saat,tur,kaynak,firmaId:fid,ucret:fid?0:(+val('r_ucret')||S.fiyat[tur]),durum:'bekliyor',odeme:null,sadeceEbeveyn:cocuk&&chk('r_ebeveyn'),not:val('r_not')};
     S.seanslar.push(s);M.d.set(d.id,d);M.s.set(s.id,s);
     const n=smsDanisanVeUzman('yeni',s,UI.rol!=='psikolog'); // randevuyu psikolog kendisi açtıysa kendisine SMS gitmez
