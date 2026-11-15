@@ -1370,9 +1370,12 @@ function dListHTML(){const q=UI.dq||'';const sira=UI.dsira||'son';let list=sorte
   <div class="pager"><span class="num kayit">${(st+1).toLocaleString('tr-TR')}–${Math.min(st+per,list.length).toLocaleString('tr-TR')} / ${list.length.toLocaleString('tr-TR')} kayıt</span><span class="psayfa"><button class="btn sm" data-act="dSayfa" data-v="-1" ${UI.dp===0?'disabled':''}>${ic('l')}Önceki</button><span class="num">Sayfa ${UI.dp+1} / ${pages}</span><button class="btn sm" data-act="dSayfa" data-v="1" ${UI.dp>=pages-1?'disabled':''}>Sonraki${ic('r')}</button></span></div>`}
 /* ============ Aile / yakın bağlantıları ============
    d.bag = [{id, rol}] → "id, d'nin <rol>u". Bağlantı iki kayda da (ters rolüyle) yazılır. */
-const BAG_ROL={es:['Eşi / partneri','es'],anne:['Annesi','cocuk'],baba:['Babası','cocuk'],veli:['Velisi','cocuk'],cocuk:['Çocuğu','ebeveyn'],ebeveyn:['Anne / babası','cocuk'],
-  kardes:['Kardeşi','kardes'],cift:['Çift kaydı','ciftUye'],ciftUye:['Çift kaydındaki kişi','cift'],ebeveynCift:['Anne-baba çift kaydı','cocuk'],diger:['Yakını','diger']};
-const BAG_SECIM=['es','anne','baba','cocuk','kardes','cift','diger'];
+const BAG_ROL={es:['Eşi','es'],anne:['Annesi','cocuk'],baba:['Babası','cocuk'],veli:['Velisi','cocuk'],cocuk:['Çocuğu','ebeveyn'],ebeveyn:['Anne / babası','cocuk'],
+  kardes:['Kardeşi','kardes'],cift:['Kendi çift kaydı','ciftUye'],ciftUye:['Çiftteki kişi','cift'],ebeveynCift:['Anne-babasının çift kaydı','cocuk'],diger:['Yakını','diger']};
+// Ofisin kullandığı bağlantılar: anne, baba, eş, çocuk (çocuk/ergen). Çift kaydıyla bağlarken o kayda uygun seçenekler çıkar.
+const BAG_SECIM=['anne','baba','es','cocuk'];
+function bagSecenek(a,b){const ac=a.tur==='Çift',bc=b.tur==='Çift';
+  if(bc&&!ac)return['cift','ebeveynCift'];if(ac&&!bc)return['ciftUye','cocuk'];return BAG_SECIM}
 function bagListe(d){return(d&&d.bag||[]).filter(x=>D(x.id)&&BAG_ROL[x.rol])}
 function bagVar(a,b){return!!(a.bag||[]).find(x=>x.id===b.id)}
 function bagKur(a,b,rol){if(!a||!b||a.id===b.id||!BAG_ROL[rol])return false;
@@ -1385,22 +1388,22 @@ function bagOneri(d){if(!d||d.anonim)return[];const o=new Map();const tk=t=>digi
   const ekle=(x,rol,neden)=>{if(x.id===d.id||x.anonim||bagVar(d,x)||o.has(x.id))return;o.set(x.id,{d:x,rol,neden})};
   S.danisanlar.forEach(x=>{if(x.id===d.id||x.anonim)return;const xn=adNorm(x.ad);
     // d'nin kaydında adı geçen kişi x ise
-    kisiler(d).forEach(([r,p])=>{if(adNorm(p.ad)===xn&&xn.includes(' '))ekle(x,x.tur==='Çift'?'cift':r==='es'?'es':r,`bu kayıtta ${({es:'eş',anne:'anne',baba:'baba',veli:'veli'})[r]} olarak geçiyor`)});
+    kisiler(d).forEach(([r,p])=>{if(adNorm(p.ad)===xn&&xn.includes(' '))ekle(x,x.tur==='Çift'?'cift':r==='veli'?'':r,`bu kayıtta ${({es:'eş',anne:'anne',baba:'baba',veli:'veli'})[r]} olarak geçiyor`)});
     // x'in kaydında d adı geçiyorsa
     kisiler(x).forEach(([r,p])=>{if(adNorm(p.ad)===adNorm(d.ad)&&adNorm(d.ad).includes(' '))ekle(x,r==='es'?(x.tur==='Çift'?'cift':'es'):'cocuk',`${x.ad} kaydında adı geçiyor`)});
     // ortak telefon
     const dt=[d.tel,...kisiler(d).map(([,p])=>p.tel)].map(tk).filter(t=>t.length===10);
     const xt=[x.tel,...kisiler(x).map(([,p])=>p.tel)].map(tk).filter(t=>t.length===10);
-    if(dt.some(t=>xt.includes(t)))ekle(x,adNorm(x.ad).split(' ').pop()===adNorm(d.ad).split(' ').pop()?'kardes':'diger','aynı telefon numarası')});
+    if(dt.some(t=>xt.includes(t)))ekle(x,'','aynı telefon numarası')});
   return[...o.values()].slice(0,6)}
 function bagBolum(d,psk){const l=bagListe(d);const on=psk?[]:bagOneri(d);if(psk&&!l.length)return'';
   return`<div class="bag-bolum"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h3 style="margin:0">Aile / yakın bağlantıları</h3>${psk||d.anonim?'':`<button class="btn sm" data-act="bagAc" data-id="${d.id}">${ic('plus')}Bağla</button>`}</div>
-  ${l.length?`<div class="bag-liste">${l.map(x=>{const y=D(x.id);return`<div class="bag-satir"><button type="button" class="bag-ad" data-act="${psk?'pDanisan':'danisanDetay'}" data-id="${y.id}"><small>${BAG_ROL[x.rol][0]}</small><b>${kvkkNokta(y)}${esc(y.ad)}${y.tur==='Çift'&&y.es?' &amp; '+esc(y.es.ad):''}</b><span class="small muted">${y.tur||'Tür belirtilmemiş'} · ${toplamSeans(y)} seans</span></button>${psk?'':`<button class="btn sm ghost" data-act="bagSil" data-id="${d.id}" data-o="${y.id}" aria-label="Bağlantıyı kaldır">Kaldır</button>`}</div>`}).join('')}</div>`:`<div class="small muted">${psk?'':'Henüz bağlantı yok. Eşini, anne-babasını veya çocuğunu bağlayarak aile kayıtlarını birlikte görebilirsiniz.'}</div>`}
+  ${l.length?`<div class="bag-liste">${l.map(x=>{const y=D(x.id);return`<div class="bag-satir"><button type="button" class="bag-ad" data-act="${psk?'pDanisan':'danisanDetay'}" data-id="${y.id}"><small>${BAG_ROL[x.rol][0]}</small><b>${kvkkNokta(y)}${esc(y.ad)}${y.tur==='Çift'&&y.es?' &amp; '+esc(y.es.ad):''}</b><span class="small muted">${y.tur||'Tür belirtilmemiş'} · ${toplamSeans(y)} seans</span></button>${psk?'':`<button class="btn sm ghost" data-act="bagSil" data-id="${d.id}" data-o="${y.id}" aria-label="Bağlantıyı kaldır">Kaldır</button>`}</div>`}).join('')}</div>`:`<div class="small muted">${psk?'':'Henüz bağlantı yok. Annesini, babasını, eşini veya çocuğunu bağlayarak aile kayıtlarını birlikte görebilirsiniz.'}</div>`}
   ${on.length?`<div class="bag-oneri"><span class="small"><b>Olası yakınlar</b> · kayıtlardan bulundu, kontrol edip bağlayın</span>${on.map(x=>`<div class="bag-satir"><span class="grow"><b>${esc(x.d.ad)}${x.d.tur==='Çift'&&x.d.es?' &amp; '+esc(x.d.es.ad):''}</b><span class="small muted" style="display:block">${esc(x.neden)} · ${x.d.tur||'tür yok'} · ${toplamSeans(x.d)} seans</span></span><button class="btn sm" data-act="bagRol" data-id="${d.id}" data-o="${x.d.id}" data-r="${x.rol}">Bağla</button></div>`).join('')}</div>`:''}</div>`}
 function bagRolSor(aId,bId,oner){const a=D(aId),b=D(bId);if(!a||!b)return;
   sheet('Bağlantı türü',`<p style="margin:0"><b>${esc(b.ad)}${b.tur==='Çift'&&b.es?' &amp; '+esc(b.es.ad):''}</b>, <b>${esc(a.ad)}</b> için kim?</p>
-  <div class="bag-roller">${BAG_SECIM.map(r=>`<button type="button" class="btn ${r===oner?'primary':''}" data-act="bagYap" data-id="${aId}" data-o="${bId}" data-r="${r}">${BAG_ROL[r][0]}</button>`).join('')}</div>
-  <p class="small muted" style="margin:0">Bağlantı iki karta da eklenir. Kayıtlar birleşmez; seanslar ayrı kalır.</p>`,`<button class="btn" data-act="danisanDetay" data-id="${aId}">Geri</button>`)}
+  <div class="bag-roller">${bagSecenek(a,b).map(r=>`<button type="button" class="btn ${r===oner?'primary':''}" data-act="bagYap" data-id="${aId}" data-o="${bId}" data-r="${r}">${BAG_ROL[r][0]}</button>`).join('')}</div>
+  <p class="small muted" style="margin:0">Çocuk seçeneği ergenler için de kullanılır. Bağlantı iki karta da eklenir. Kayıtlar birleşmez; seanslar ayrı kalır.</p>`,`<button class="btn" data-act="danisanDetay" data-id="${aId}">Geri</button>`)}
 function danisanDetay(id,psk){const d=D(id);const self=psk?U(UI.uzmanId):null;
   let ses=S.seanslar.filter(s=>s.danisanId===id&&s.durum!=='iptal');if(psk)ses=ses.filter(s=>s.uzmanId===self.id);
   ses.sort((a,b)=>(a.tarih+a.saat).localeCompare(b.tarih+b.saat));
