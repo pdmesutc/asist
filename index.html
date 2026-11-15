@@ -543,6 +543,14 @@ const digits=s=>String(s||'').replace(/\D/g,'');
 const ini=s=>String(s||'').replace(/^(Uzm\.\s*)?Psk\.\s*/,'').split(' ').filter(Boolean).slice(0,2).map(x=>x[0]).join('').toLocaleUpperCase('tr');
 const SAATLER=Array.from({length:24},(_,i)=>pad(i)+':00'); /* 00:00–23:00 seans başlangıçları; her ekranda şubenin yönetici panelindeki açılış–kapanış saatine göre süzülür */
 const GUNLER=['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi'];
+const GUN_KISA=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];const HAFTA=[1,2,3,4,5,6,0];
+// Şubenin çalışma günleri (0=Pazar … 6=Cumartesi); tanımlı değilse Pazartesi–Cumartesi
+const subeGunler=sb=>sb&&Array.isArray(sb.gunler)&&sb.gunler.length?sb.gunler:[1,2,3,4,5,6];
+const subeAcik=(subeId,tarih)=>subeGunler(B(subeId)).includes(parse(tarih).getDay());
+function gunAraligi(l){const h=HAFTA.filter(g=>l.includes(g));if(h.length===7)return'Her gün';const parca=[];let bas=0;
+  for(let k=1;k<=h.length;k++){if(k===h.length||HAFTA.indexOf(h[k])!==HAFTA.indexOf(h[k-1])+1){const n=k-bas;parca.push(n>2?GUN_KISA[h[bas]]+'–'+GUN_KISA[h[k-1]]:h.slice(bas,k).map(g=>GUN_KISA[g]).join(', '));bas=k}}
+  return parca.join(', ')}
+const kapaliMesaj=(subeId,tarih)=>`${GUNLER[parse(tarih).getDay()]} günü ${(B(subeId)||{}).ad||''} şubesi kapalı.`;
 const TURLER=['Yetişkin','Çocuk','Ergen','Çift'];
 const TK={'Yetişkin':'yet','Çocuk':'coc','Ergen':'erg','Çift':'cift'};
 const ODA_TURLERI=['Yetişkin Odası','Çocuk/Oyun Odası','Çift Odası','Online Oda','Skype Odası'];
@@ -876,7 +884,7 @@ function cakisma({tarih,saat,uzmanId,odaId,subeId,haricId,danisanId}){
   const e=[];const sb=B(subeId);const u=U(uzmanId);
   if(!tarih||!saat)return['Tarih ve saat seçin.'];
   if(sb&&(saat<sb.acilis||saat>=sb.kapanis))e.push(`Saat şube çalışma aralığı dışında (${sb.acilis}–${sb.kapanis}).`);
-  if(parse(tarih).getDay()===0)e.push('Pazar günü şube kapalı.');
+  if(sb&&!subeAcik(subeId,tarih))e.push(kapaliMesaj(subeId,tarih));
   if(u){
     if(!u.aktif)e.push('Uzman pasif durumda.');
     if((u.izinler||[]).includes(tarih))e.push(`${u.ad} bu tarihte izinli.`);
@@ -1119,13 +1127,13 @@ function calcHtml(c,p){const n=$('#'+p+'_kdvnot');if(n)n.textContent=c.kdvOran?`
 function vTakvim(){
   const t=UI.tk||TODAY;const sb=B(UI.subeId);const rooms=subeOdalari(UI.subeId);
   const day=S.seanslar.filter(s=>s.subeId===UI.subeId&&s.tarih===t&&s.durum!=='iptal');
-  const kapali=parse(t).getDay()===0;
+  const kapali=!subeAcik(UI.subeId,t);
   const saatler=SAATLER.filter(h=>h>=sb.acilis&&h<sb.kapanis);
   const doluluk=rooms.length*saatler.length?Math.round(day.length/(rooms.length*saatler.length)*100):0;
   return`<div class="page-head"><div><h1>Oda Takvimi</h1></div></div>
   <div class="perbar"><div class="pnav"><button class="icon-btn" data-act="tkShift" data-v="-1" aria-label="Önceki gün">${ic('l')}</button><span class="lab">${t===TODAY?'Bugün · ':''}${fmtD(t,{day:'numeric',month:'long',weekday:'long'})}</span><button class="icon-btn" data-act="tkShift" data-v="1" aria-label="Sonraki gün">${ic('r')}</button><button class="btn sm ghost" data-act="tkToday">Bugün</button></div>
   <div class="legend" style="margin-left:auto">${TURLER.map(x=>`<span class="t-${TK[x]}">${x}</span>`).join('')}<span class="lg-ok">✓ Ödendi</span></div></div>
-  ${kapali?`<div class="empty"><b>Pazar · şube kapalı</b>Başka bir gün seçin.</div>`:`<div class="calw"><table class="cal"><thead><tr><th>Saat</th>${rooms.map(r=>`<th title="${esc(r.ad)} · ${r.tur}" class="t-${OK[r.tur]}"><span class="genis">${esc(r.ad)}<small>${r.tur}</small></span><span class="kisa">${esc(odaKisa(r))}</span></th>`).join('')}</tr></thead><tbody>
+  ${kapali?`<div class="empty"><b>${GUNLER[parse(t).getDay()]} · şube kapalı</b>Şubenin çalışma günleri: ${gunAraligi(subeGunler(sb))}. Başka bir gün seçin.</div>`:`<div class="calw"><table class="cal"><thead><tr><th>Saat</th>${rooms.map(r=>`<th title="${esc(r.ad)} · ${r.tur}" class="t-${OK[r.tur]}"><span class="genis">${esc(r.ad)}<small>${r.tur}</small></span><span class="kisa">${esc(odaKisa(r))}</span></th>`).join('')}</tr></thead><tbody>
   ${saatler.map(h=>`<tr><th scope="row">${h}</th>${rooms.map(r=>takvimHucre(t,h,r,day)).join('')}</tr>`).join('')}
   </tbody></table></div>`}`}
 function takvimHucre(t,h,r,day){
@@ -1235,11 +1243,11 @@ function formYenile(prefUz){
 }
 function adaylar(){const fid=rKaynak()==='firma'?val('r_firma'):'';const firma=fid?F(fid):null;const sub=val('r_sube'),tur=rTur();
   return S.uzmanlar.filter(u=>!uzmanEngel(u,sub,tur,firma))}
-function uzmanDurum(u,sub,t,h){if((u.izinler||[]).includes(t))return'İzinli';const m=((u.musait||{})[sub]||{})[parse(t).getDay()]||[];if(!m.includes(h))return'Bu saatte çalışmıyor';
+function uzmanDurum(u,sub,t,h){if(!subeAcik(sub,t))return'Şube kapalı';if((u.izinler||[]).includes(t))return'İzinli';const m=((u.musait||{})[sub]||{})[parse(t).getDay()]||[];if(!m.includes(h))return'Bu saatte çalışmıyor';
   const b=S.seanslar.find(x=>x.durum!=='iptal'&&x.tarih===t&&x.saat===h&&x.uzmanId===u.id);return b?`Seansı var${b.subeId!==sub?' ('+B(b.subeId).ad+')':''}`:''}
 function slotlarAsistan(){const sub=val('r_sube'),tarih=val('r_tarih'),tur=rTur(),secili=val('r_saat');const box=$('#r_slots');const sb=B(sub);
   if(!tarih){box.innerHTML='<span class="small muted">Tarih seçin.</span>';return}
-  if(parse(tarih).getDay()===0){box.innerHTML='<span class="small muted">Pazar günü şube kapalı.</span>';return}
+  if(!subeAcik(sub,tarih)){box.innerHTML=`<span class="small muted">${kapaliMesaj(sub,tarih)}</span>`;return}
   const ad=adaylar();const tk=RS.oneri&&U(RS.oneri.uzmanId);
   if(!ad.length){box.innerHTML=`<span class="small" style="color:var(--bad)">${tur} seansı için bu şubede uygun uzman yok.</span>`;return}
   box.innerHTML=SAATLER.filter(h=>h>=sb.acilis&&h<sb.kapanis).map(h=>{
@@ -1264,6 +1272,7 @@ function slotlar(){if(RS.mode!=='psikolog')return;
   const sub=val('r_sube'),uz=val('r_uzman'),tarih=val('r_tarih'),tur=rTur(),secili=val('r_saat');const box=$('#r_slots');
   if(!uz||!tarih){box.innerHTML='<span class="small muted">Önce uzman ve tarih seçin.</span>';return}
   const u=U(uz),sb=B(sub);const g=parse(tarih).getDay();const m=((u.musait||{})[sub]||{})[g]||[];
+  if(!subeAcik(sub,tarih)){box.innerHTML=`<span class="small muted">${kapaliMesaj(sub,tarih)}</span>`;return}
   if((u.izinler||[]).includes(tarih)){box.innerHTML=`<span class="small" style="color:var(--bad)">${esc(u.ad)} bu tarihte izinli.</span>`;return}
   if(!m.length){
     const gunler=Object.entries((u.musait||{})[sub]||{}).filter(([k,v])=>v.length).map(([k])=>GUNLER[k]);
@@ -1452,7 +1461,7 @@ function odaIstat(){const m={};S.seanslar.forEach(x=>{if(x.durum==='iptal'||!x.o
 const odaIstatYaz=o=>!o?'Hiç seans yok':`${o.n} seans · son: ${fmtD(o.son,{day:'numeric',month:'short',year:'numeric'})}${o.plan?` · ${o.plan} planlı`:''}`;
 function vSubeler(){return`<div class="page-head"><div><h1>Şubeler & Odalar</h1><p>${S.subeler.length} şube · ${S.odalar.length} oda</p></div><button class="btn primary" data-act="subeDuz" data-id="">${ic('plus')}Şube ekle</button></div>
   <div class="grid2">${(()=>{const st=odaIstat();return S.subeler.map(sb=>{const rooms=subeOdalari(sb.id);return`<div class="lc"><div class="lc-h"><div><b>${esc(sb.ad)}</b><div class="small muted">${esc(sb.adres)}</div></div><span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn sm" data-act="gozlem" data-v="${sb.id}" title="Bu şubenin asistan ekranlarını görün (danışanlar, görüşmeler)">${ic('eye')}Gözlem</button><button class="btn sm" data-act="subeDuz" data-id="${sb.id}">Düzenle</button></span></div>
-   <div class="meta"><span>Çalışma <strong class="num">${sb.acilis}–${sb.kapanis}</strong></span><span>Tel <strong>${esc(sb.tel||'—')}</strong></span>${/^https?:\/\//i.test(sb.harita||'')?`<a href="${esc(sb.harita)}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">Haritada aç ↗</a>`:''}</div>
+   <div class="meta"><span>Çalışma <strong class="num">${gunAraligi(subeGunler(sb))} · ${sb.acilis}–${sb.kapanis}</strong></span><span>Tel <strong>${esc(sb.tel||'—')}</strong></span>${/^https?:\/\//i.test(sb.harita||'')?`<a href="${esc(sb.harita)}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">Haritada aç ↗</a>`:''}</div>
    <div class="rooms">${rooms.map((o,i)=>`<div><span><b style="font-weight:600">${esc(o.ad)}</b> <span class="tchip t-${OK[o.tur]}">${o.tur}</span><span class="small muted" style="display:block">${odaIstatYaz(st[o.id])}</span></span><span style="display:inline-flex;align-items:center"><span class="oda-sira"><button class="btn sm ghost" data-act="odaSira" data-id="${o.id}" data-y="-1" ${i?'':'disabled'} aria-label="${esc(o.ad)} yukarı taşı">▲</button><button class="btn sm ghost" data-act="odaSira" data-id="${o.id}" data-y="1" ${i<rooms.length-1?'':'disabled'} aria-label="${esc(o.ad)} aşağı taşı">▼</button></span><button class="btn sm ghost" data-act="odaDuz" data-id="${o.id}" data-s="${sb.id}">Düzenle</button></span></div>`).join('')||'<div class="muted small">Oda yok</div>'}</div>
    <button class="btn sm" data-act="odaDuz" data-id="" data-s="${sb.id}">${ic('plus')}Oda ekle</button></div>`}).join('')})()}</div>`}
 
@@ -1590,7 +1599,7 @@ function vMusaitlik(){const u=U(UI.uzmanId);UI.ms=u.subeIds.includes(UI.ms)?UI.m
   ${SUNUCU?`<div class="card"><h2>Doğum günüm</h2><span class="small muted">Yalnızca gün ve ay saklanır. Doğum gününüzde ofisten kutlama mesajı alırsınız.</span>
     <div class="row2" style="align-items:end">${fld('Gün / ay',dogumSec('ms_dg',u.dogum))}<div><button class="btn primary" data-act="dogumKaydet">Kaydet</button></div></div></div>`:''}
   ${u.subeIds.length>1?`<div class="seg">${u.subeIds.map(id=>`<button class="${id===UI.ms?'on':''}" data-act="mSube" data-v="${id}">${esc(B(id).ad)}</button>`).join('')}</div>`:''}
-  <div class="days">${[1,2,3,4,5,6].map(g=>{const h=(m[g]||[]).filter(x=>saatler.includes(x));const diger=u.subeIds.filter(id=>id!==UI.ms&&((u.musait[id]||{})[g]||[]).length).map(id=>B(id).ad);
+  <div class="days">${HAFTA.filter(g=>subeGunler(B(UI.ms)).includes(g)).map(g=>{const h=(m[g]||[]).filter(x=>saatler.includes(x));const diger=u.subeIds.filter(id=>id!==UI.ms&&((u.musait[id]||{})[g]||[]).length).map(id=>B(id).ad);
    return`<div class="dayrow"><div class="dayrow-h"><b>${GUNLER[g]}</b><span class="small muted">${h.length?`${h.length} saat · ${h[0]}–${pad(parseInt(h[h.length-1])+1)}:00`:'Çalışmıyor'}${diger.length?' · '+diger.join(', ')+' şubesinde de':''}</span><span style="display:flex;gap:6px"><button class="btn sm" data-act="mGun" data-g="${g}" data-v="tum">Tüm gün</button><button class="btn sm ghost" data-act="mGun" data-g="${g}" data-v="yok">Kapat</button></span></div>
    <div class="chips">${saatler.map(x=>`<button class="hchip ${h.includes(x)?'on':''}" data-act="mToggle" data-g="${g}" data-h="${x}" aria-pressed="${h.includes(x)}">${x}</button>`).join('')}</div></div>`}).join('')}</div>
   <div class="card"><h2>İzin / tatil günleri</h2><div class="toolbar"><input type="date" id="izinT" class="inp" style="width:auto" min="${TODAY}"><button class="btn" data-act="izinEkle">${ic('plus')}İzin ekle</button></div>
@@ -2216,7 +2225,7 @@ const A={
   formYenile(d,el){if(el&&el.id==='r_tarih'){if(RS.mode==='psikolog')$('#r_saat').value='';else sonucGizle()}formYenile()},
   saatSecDegis(){sonucGizle();formKontrol()},
   sorgula(){const t=val('r_tarih'),h=val('r_saatSec');if(!t||!h){toast('Tarih ve saat seçin.',1);return}
-    if(parse(t).getDay()===0){toast('Pazar günü şube kapalı.',1);return}
+    if(!subeAcik(val('r_sube'),t)){toast(kapaliMesaj(val('r_sube'),t),1);return}
     if(t<TODAY||(t===TODAY&&parseInt(h)<=nowH())){toast('Geçmiş bir saat seçtiniz.',1);return}
     $('#r_sonuc').hidden=false;$('#r_fa').hidden=false;A.slotSec({h});$('#r_sonuc').scrollIntoView({block:'start',behavior:'smooth'})},
   formKontrol(){formKontrol()},
@@ -2304,14 +2313,17 @@ const A={
   kopya(d){navigator.clipboard.writeText(d.v).then(()=>toast('Kopyalandı: '+d.v),()=>toast(d.v))},
   gozlem(d){UI.gozlem=true;UI.subeId=d.v;UI.view='gorusmeler';UI.per={tip:'gun',ref:TODAY};render();scrollTo(0,0)},
   gozlemCik(){UI.gozlem=false;UI.view='ozet';UI.per={tip:'ay',ref:TODAY};render();scrollTo(0,0)},
-  subeDuz(d){const s=d.id?B(d.id):{ad:'',adres:'',harita:'',tel:'',acilis:'09:00',kapanis:'22:00'};const hsA=Array.from({length:24},(_,i)=>pad(i)+':00'),hsK=Array.from({length:24},(_,i)=>pad(i+1)+':00');
+  subeDuz(d){const s=d.id?B(d.id):{ad:'',adres:'',harita:'',tel:'',acilis:'09:00',kapanis:'22:00'};const sg=subeGunler(s);const hsA=Array.from({length:24},(_,i)=>pad(i)+':00'),hsK=Array.from({length:24},(_,i)=>pad(i+1)+':00');
     sheet(d.id?'Şubeyi düzenle':'Yeni şube',`${fld('Şube adı',`<input id="sb_ad" value="${esc(s.ad)}" placeholder="Örn. Kadıköy">`)}${fld('Adres',`<textarea id="sb_adres">${esc(s.adres)}</textarea>`)}
     <div class="row2">${fld('Telefon',`<input id="sb_tel" type="tel" data-tel="sabit" inputmode="numeric" placeholder="2163901234" autocomplete="off" value="${esc(s.tel||'')}">`)}${fld('Harita bağlantısı',`<input id="sb_harita" value="${esc(s.harita)}" placeholder="https://maps.google.com/...">`)}</div>
     <div class="row2">${fld('Açılış',`<select id="sb_ac">${hsA.map(h=>`<option ${h===s.acilis?'selected':''}>${h}</option>`).join('')}</select>`)}${fld('Kapanış',`<select id="sb_kp">${hsK.map(h=>`<option ${h===s.kapanis?'selected':''}>${h}</option>`).join('')}</select>`)}</div>
-    <span class="small muted">Asistanın ve psikoloğun randevu ekranları, oda takvimi ve uzman müsaitlik ekranı bu aralığı kullanır. Kapanış, son seansın bittiği saattir (ör. 22:00 → son seans 21:00).</span>
+    <div class="field"><span class="lbl">Çalışma günleri</span><div class="chips" id="sb_gunler">${HAFTA.map(g=>`<button type="button" class="hchip ${sg.includes(g)?'on':''}" data-act="sbGun" data-g="${g}" aria-pressed="${sg.includes(g)}">${GUN_KISA[g]}</button>`).join('')}</div></div>
+    <span class="small muted">Kapalı günlerde randevu verilemez, oda takviminde “şube kapalı” yazar ve psikologlar o günler için müsaitlik giremez. Kapanış, son seansın bittiği saattir (ör. 22:00 → son seans 21:00).</span>
     ${SUNUCU?`<div class="sub-box"><span class="lbl">Asistan hesapları</span><span class="small muted">Asistanların giriş hesapları <b>Hesaplar</b> ekranından açılır. Bir şubede birden fazla asistan olabilir.</span></div>`:`<div class="sub-box"><span class="lbl">Asistan girişi</span><div class="row2">${fld('E-posta',`<input id="sb_ak" type="email" inputmode="email" autocapitalize="none" spellcheck="false" value="${esc(s.asistan?s.asistan.email:'')}">`)}${fld('Şifre',`<input id="sb_as" type="text" autocomplete="off" value="${SUNUCU?'':esc(s.asistan?s.asistan.sifre:'')}" placeholder="${SUNUCU?(d.id?'Değiştirmek için yeni şifre':'En az 10 karakter'):'En az 6 karakter'}">`)}</div><span class="small muted">Şubenin asistanı bu e-posta ve şifreyle giriş yapar.</span></div>`}`,
     `<button class="btn" data-act="kapat">Vazgeç</button><button class="btn primary" data-act="subeKaydet" data-id="${d.id}">Kaydet</button>`)},
-  subeKaydet(d){const ad=val('sb_ad');if(!ad){toast('Şube adı gerekli.',1);return}{const h=telHata([['sb_tel','Şube telefonu',false]]);if(h){toast(h,1);return}}const x={ad,adres:val('sb_adres'),tel:val('sb_tel'),harita:/^https?:\/\//i.test(val('sb_harita'))?val('sb_harita'):'',acilis:val('sb_ac'),kapanis:val('sb_kp')};
+  sbGun(d,el){el.classList.toggle('on');el.setAttribute('aria-pressed',el.classList.contains('on'))},
+  subeKaydet(d){const ad=val('sb_ad');if(!ad){toast('Şube adı gerekli.',1);return}{const h=telHata([['sb_tel','Şube telefonu',false]]);if(h){toast(h,1);return}}const x={ad,adres:val('sb_adres'),tel:val('sb_tel'),harita:/^https?:\/\//i.test(val('sb_harita'))?val('sb_harita'):'',acilis:val('sb_ac'),kapanis:val('sb_kp'),gunler:[...document.querySelectorAll('#sb_gunler .hchip.on')].map(b=>+b.dataset.g).sort()};
+    if(!x.gunler.length){toast('En az bir çalışma günü seçin.',1);return}
     if(x.acilis>=x.kapanis){toast('Kapanış saati açılıştan sonra olmalı.',1);return}
     if(SUNUCU){const id=d.id||uid('b');if(d.id)Object.assign(B(d.id),x);else S.subeler.push({id,...x});kapat();commit();toast(d.id?'Şube kaydedildi.':'Şube eklendi. Asistan hesabını Hesaplar ekranından açabilirsiniz.');return}
     const ak=val('sb_ak'),as=val('sb_as');if(!EPOSTA_RE.test(ak)){toast('Asistan için geçerli bir e-posta girin.',1);$('#sb_ak').focus();return}
