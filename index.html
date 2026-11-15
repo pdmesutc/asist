@@ -1069,7 +1069,7 @@ function seansCard(s,opt){opt=opt||{};
   }
   return`<article class="scard st-${s.durum} t-${TK[s.tur]}">
     <div class="s-time">${s.saat}<small>${esc(o?o.ad:'')}</small></div>
-    <div class="s-main"><button class="s-name" style="background:none;border:0;padding:0;text-align:left" data-act="${opt.psikolog?'pDanisan':'danisanDetay'}" data-id="${d.id}"><span class="ad-n">${kvkkBas(d)}${esc(d.ad)}</span>${fs?`<span class="badge b-firma">${esc(fs.ad)}</span>`:''}</button>
+    <div class="s-main"><button class="s-name" style="background:none;border:0;padding:0;text-align:left" data-act="${opt.psikolog?'pDanisan':'danisanDetay'}" data-id="${d.id}"><span class="ad-n">${kvkkBas(d)}${esc(d.ad)}</span>${fs?`<span class="badge b-firma">${esc(fs.ad)}</span>`:''}${UI.rol!=='psikolog'&&s.durum!=='iptal'&&ilkGorusme(s)?'<span class="badge b-ilk">İlk görüşme</span>':''}</button>
       <div class="s-meta">${tchip(s.tur)}${s.sadeceEbeveyn?'<span class="tchip t-coc">Ebeveyn görüşmesi</span>':''}<span>${opt.psikolog?esc(B(s.subeId).ad)+' şubesi':esc(u.ad)}</span><span>· ${kayAd(s.kaynak)}</span></div></div>
     <div class="s-side">${sBadge(s)}${fin?(fs?'<b class="small muted">Ücretsiz</b>':`<b>${TL(s.durum==='odendi'?s.odeme.tahsilat:s.ucret)}</b>`):''}</div>
     ${act?`<div class="s-act">${act}</div>`:''}
