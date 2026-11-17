@@ -382,6 +382,7 @@ table.cal{border-collapse:separate;border-spacing:0;min-width:100%}
 .dsira{display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--muted);white-space:nowrap}.dsira select{width:auto;min-width:0}
 .badge.b-ilk{background:#FCEBEB;color:#A32D2D;border:1px solid #F7C1C1;font-size:.72rem;vertical-align:middle;white-space:nowrap}
 .bag-bolum{display:flex;flex-direction:column;gap:8px}
+.pwa-adim{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:10px}.pwa-adim li b{display:block}.pwa-adim li span{font-size:.9rem;color:var(--muted)}
 .s-not{display:flex;gap:6px;align-items:flex-start;background:color-mix(in srgb,var(--warn) 13%,var(--surface));color:var(--ink);border-radius:8px;padding:5px 8px;font-size:.8rem;margin:4px 0;line-height:1.35}
 .s-not svg{width:14px;height:14px;flex:none;margin-top:2px}
 .nb{display:flex;flex-direction:column;gap:6px}.nb-s{display:flex;flex-direction:column;border-top:1px solid var(--line);padding-top:6px;font-size:.88rem}
@@ -756,6 +757,12 @@ function demoFirmaDanisan(X){if(X.danisanlar.some(d=>d.id==='dfirma'))return;
 const KEY='asistpsikolog_v1',UIKEY='asistpsikolog_ui_v1';
 /* Sunucu modu: giriş ve hesaplar sunucuda (api/), şifreler tarayıcıda tutulmaz */
 const SUNUCU=!!document.querySelector('meta[name="ap-sunucu"]');
+/* Telefona yüklenebilir uygulama (PWA). Servis çalışanı veri saklamaz; yalnızca bağlantı yok sayfasını tutar. */
+const PWA={istem:null,
+  acik:()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true,
+  ios:()=>/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)};
+if(SUNUCU&&'serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='127.0.0.1'))addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();PWA.istem=e});
 const API={csrf:'',
   async cagir(yol,veri,_tekrar){const o={method:veri?'POST':'GET',headers:{'X-Istek':'asistpsikolog'},credentials:'same-origin',cache:'no-store'};
     if(veri){o.headers['Content-Type']='application/json';o.headers['X-Csrf']=API.csrf;o.body=JSON.stringify(veri)}
@@ -2311,7 +2318,15 @@ const A={
     sheet('Hesabım',`<div class="secili"><div class="grow"><b>${esc(h.ad)}</b><span class="small muted">${h.rol} · ${esc(SUNUCU&&UI.hesap&&!UI.gozlem?UI.hesap.email:h.kul)}</span></div></div>
     ${UI.gozlem?'<span class="small muted">Şu an gözlem modundasınız. Yönetime dönmek için üstteki bandı kullanın.</span>':''}
     <button class="btn block" data-act="sifreDegis">${ic('shield')}Şifremi değiştir</button>
+    ${PWA.acik()?'':`<button class="btn block" data-act="pwaYukle">${ic('dl')}Telefona uygulama olarak yükle</button>`}
+    <button class="btn block" data-act="yenile">Uygulamayı yenile</button>
     <button class="btn danger block" data-act="cikis">Çıkış yap</button>`)},
+  yenile(){location.reload()},
+  pwaYukle(){if(PWA.istem){const e=PWA.istem;PWA.istem=null;e.prompt();e.userChoice.then(r=>{if(r.outcome==='accepted'){kapat();toast('Uygulama telefonunuza yükleniyor.')}}).catch(()=>{});return}
+    const adim=PWA.ios()?[['Safari ile açın','Bu sayfayı iPhone\'da <b>Safari</b>\'de açın (Chrome\'da “Ana ekrana ekle” çıkmayabilir).'],['Paylaş düğmesi','Alttaki <b>Paylaş</b> simgesine (yukarı ok olan kare) dokunun.'],['Ana Ekrana Ekle','Listeyi aşağı kaydırıp <b>Ana Ekrana Ekle</b>\'ye, sonra sağ üstte <b>Ekle</b>\'ye dokunun.'],['Simgeden açın','Ana ekrandaki <b>AsistPsikolog</b> simgesiyle açın ve bir kez giriş yapın.']]
+      :[['Chrome ile açın','Bu sayfayı Android telefonda <b>Chrome</b>\'da açın.'],['Menü','Sağ üstteki <b>⋮</b> menüsüne dokunun.'],['Uygulamayı yükle','<b>Uygulamayı yükle</b> veya <b>Ana ekrana ekle</b>\'yi seçip onaylayın.'],['Simgeden açın','Ana ekrandaki <b>AsistPsikolog</b> simgesiyle açın ve bir kez giriş yapın.']];
+    sheet('Telefona yükle',`<p class="small muted" style="margin:0">Mağaza gerekmez. Uygulama aynı sunucudan çalışır; danışan bilgileri telefonda saklanmaz.</p>
+      <ol class="pwa-adim">${adim.map(([b,t])=>`<li><b>${b}</b><span>${t}</span></li>`).join('')}</ol>`,`<button class="btn" data-act="kapat">Tamam</button>`)},
   sifreDegis(){sheet('Şifremi değiştir',`${fld('Mevcut şifre','<div class="pw"><input id="sd_m" type="password" autocomplete="current-password"></div>')}
     ${fld('Yeni şifre','<div class="pw"><input id="sd_y" type="password" autocomplete="new-password" placeholder="'+(SUNUCU?'En az 10 karakter, harf ve rakam':'En az 6 karakter')+'"></div>')}
     ${fld('Yeni şifre (tekrar)','<div class="pw"><input id="sd_t" type="password" autocomplete="new-password"></div>')}`,
