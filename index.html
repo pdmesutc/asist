@@ -383,6 +383,7 @@ table.cal{border-collapse:separate;border-spacing:0;min-width:100%}
 .badge.b-ilk{background:#FCEBEB;color:#A32D2D;border:1px solid #F7C1C1;font-size:.72rem;vertical-align:middle;white-space:nowrap}
 .bag-bolum{display:flex;flex-direction:column;gap:8px}
 .gecmis .chk:has(input[id^="sms_"]){display:none}
+.sms-secim{display:flex;margin:10px 0}.sms-secim button{flex:1;justify-content:center;text-align:center}
 .pwa-adim{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:10px}.pwa-adim li>b{display:block}.pwa-adim li>span{font-size:.9rem;color:var(--muted)}
 .s-not{display:flex;gap:6px;align-items:flex-start;background:color-mix(in srgb,var(--warn) 13%,var(--surface));color:var(--ink);border-radius:8px;padding:5px 8px;font-size:.8rem;margin:4px 0;line-height:1.35}
 .s-not svg{width:14px;height:14px;flex:none;margin-top:2px}
@@ -1647,10 +1648,20 @@ function sablonFormuAl(){if(!$('#sb_d_yeni')||!UI.smsSube)return;S.sablon.sube=S
 function smsKarakter(t){const n=t.replace(/\[(DANISAN_ISIM|PSK_ISIM)\]/g,'x'.repeat(18)).replace(/\[TARIH\]/g,'x'.repeat(15)).replace(/\[(ONLINE_LINK|SUBE_HARITA)\]/g,'x'.repeat(40)).replace(/\[[A-Z_]+\]/g,'x'.repeat(10)).length;return`≈${n} karakter · ${n<=155?1:Math.ceil(n/150)} SMS (isimler ve tarihle birlikte)`}
 /* Deneme numaraları: test modunda SMS yalnızca bu numaralara gider (yönetici şifresiyle kaydedilir) */
 const IZ={panel:[],yeni:[],sil:new Set(),mod:'test'};
+/* SMS durumu: kapalı (hiçbir numaraya) · test (yalnızca deneme numaralarına) · açık/canlı (şablonlara göre herkese) */
+const SD={secim:'',izinli:[],kalici:false};
+const SMS_SECIM={kapali:['Kapalı','Hiçbir numaraya SMS gitmez; sizin numaranız ve deneme numaraları dahil. Randevu, erteleme ve iptaller “SMS kapalı · gönderilmedi” olarak kaydedilir.','var(--bad)'],
+  test:['Test','SMS yalnızca aşağıdaki deneme numaralarına gider. Diğer bütün danışan ve uzman mesajları gönderilmeden kaydedilir.','var(--warn)'],
+  canli:['Açık','SMS, şablonlara ve uzmanların SMS ayarına göre danışanlara ve uzmanlara gider.','var(--ok)']};
+function smsDurumCiz(){const box=$('#smsDurumKart');if(!box)return;const c=SD.secim;const [ad,acik,renk]=SMS_SECIM[c]||['—','',''];box.style.borderColor=renk;
+  box.innerHTML=`<div class="card-h"><h2>SMS durumu: ${ad.toLocaleUpperCase('tr')}</h2></div>
+   <div class="seg sms-secim" role="radiogroup" aria-label="SMS durumu">${['kapali','test','canli'].map(k=>`<button type="button" role="radio" aria-checked="${c===k}" class="${c===k?'on':''}" data-act="smsSec" data-v="${k}" ${SD.kalici&&k!=='kapali'?'disabled':''}>${SMS_SECIM[k][0]}</button>`).join('')}</div>
+   <span class="small">${acik}${c==='test'?` Şu an: <b>${SD.izinli.length?SD.izinli.map(esc).join(', '):'liste boş, hiçbir numaraya gitmez'}</b>.`:''}</span>
+   ${SD.kalici?'<span class="small" style="color:var(--bad)">SMS sunucu ayar dosyasında (config.php) kalıcı olarak kapatılmış; buradan açılamaz.</span>':''}`}
 function izinliCiz(){const box=$('#smsIzinli');if(!box)return;const kalan=IZ.panel.filter(e=>!IZ.sil.has(e.id));const degisti=IZ.yeni.length||IZ.sil.size;
   const uz=S.uzmanlar.filter(u=>u.aktif&&u.tel).sort((a,b)=>a.ad.localeCompare(b.ad,'tr'));
   box.innerHTML=`<h2>Deneme numaraları</h2><span class="small muted">SMS <b>test modundayken</b> mesajlar yalnızca bu listedeki numaralara gerçekten gider; diğer bütün danışan ve uzmanlara giden mesajlar gönderilmeden kaydedilir. En fazla 10 numara.</span>
-   ${IZ.mod==='canli'?'<div class="cmsg err"><span><b>Dikkat:</b> sunucu canlı modda; bu liste uygulanmaz, SMS herkese gider.</span></div>':''}
+   ${IZ.mod==='canli'?'<div class="cmsg err"><span><b>SMS açık (canlı):</b> bu liste şu an uygulanmaz, SMS herkese gider. Liste yalnızca Test seçildiğinde geçerlidir.</span></div>':''}
    <div class="dl">${kalan.map(e=>`<div class="row" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line)"><span style="flex:1;min-width:0"><b>${esc(e.ad)}</b> <span class="small muted num">${esc(e.maske)}</span></span><button class="btn sm ghost" data-act="izSil" data-id="${e.id}" aria-label="${esc(e.ad)} listeden çıkar">${ic('x')}</button></div>`).join('')}
      ${IZ.yeni.map((e,i)=>`<div class="row" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line)"><span style="flex:1;min-width:0"><b>${esc(e.ad)}</b> <span class="small muted num">${esc(e.goster)}</span> <span class="badge b-firma">yeni</span></span><button class="btn sm ghost" data-act="izYeniSil" data-i="${i}" aria-label="çıkar">${ic('x')}</button></div>`).join('')}
      ${!kalan.length&&!IZ.yeni.length?'<div class="small muted" style="padding:8px 12px">Liste boş: test modunda hiçbir numaraya SMS gitmez.</div>':''}</div>
@@ -1661,10 +1672,8 @@ const tel_m=t=>{t=String(t).replace(/\D/g,'').slice(-10);return t.slice(0,3)+'**
 function vSmsAyar(){const n=S.netgsm;UI.smsSube=S.subeler.some(b=>b.id===UI.smsSube)?UI.smsSube:(S.subeler[0]||{}).id;const sb=UI.smsSube;
   const kutu=([k,l])=>{const v=sablonAl(sb,k);return fld(l,`<textarea id="sb_${k}" data-in="sbSay" rows="3">${esc(v)}</textarea><span class="small muted" id="sbc_${k}">${smsKarakter(v)}</span>`)};
   return`<div class="page-head"><div><h1>SMS Merkezi</h1><p>NetGSM entegrasyonu ve otomatik mesaj şablonları</p></div></div>
-  ${SUNUCU?`<div class="card" style="border-color:${SENK.smsKapali?'var(--bad)':'var(--ok)'}"><div class="card-h"><h2>SMS gönderimi: ${SENK.smsKapali?'KAPALI':'AÇIK'}</h2>
-     ${SENK.smsKapali?`<button class="btn sm primary" data-act="smsAnahtarAc">Aç</button>`:`<button class="btn sm danger" data-act="smsAnahtarKapat">Hemen kapat</button>`}</div>
-     <span class="small muted">${SENK.smsKapali?'Hiçbir numaraya SMS gitmez — test numaraları ve sizin numaranız dahil. Sunucu NetGSM\'e gönderim isteği hiç yapmaz; randevu ve ertelemeler “SMS gönderilmedi” olarak kaydedilir.':'SMS\'ler aşağıdaki moda göre gönderilir. Kapatmak için “Hemen kapat”a basın; açmak için şifreniz istenir.'}</span></div>`:''}
-  ${SUNUCU?'<div class="cmsg" id="smsMod" hidden></div><div class="card" id="smsIzinli"><h2>Deneme numaraları</h2><span class="small muted">Yükleniyor…</span></div>':''}
+  ${SUNUCU?'<div class="card" id="smsDurumKart"><h2>SMS durumu</h2><span class="small muted">Yükleniyor…</span></div>':''}
+  ${SUNUCU?'<div class="card" id="smsIzinli"><h2>Deneme numaraları</h2><span class="small muted">Yükleniyor…</span></div>':''}
   ${SUNUCU?`<div class="form-grid">${uzmanMesajKart()}${dogumKart()}</div>`:''}
   ${SUNUCU&&S.netgsm.bagli?`<div class="card" id="smsBakiye"><div class="card-h"><h2>Kalan SMS</h2><button class="btn sm" data-act="smsBakiye">Yenile</button></div><div id="smsBakiyeIc" class="small muted">Sorgulanıyor…</div></div>`:''}
   <div class="form-grid"><div class="card"><h2>NetGSM API</h2>${fld('Kullanıcı kodu',`<input id="n_kod" value="${esc(n.kod)}" placeholder="850xxxxxxx">`)}${fld('API şifresi',`<input id="n_sifre" type="password" autocomplete="new-password" value="${SUNUCU?'':esc(n.sifre)}" placeholder="${SUNUCU&&n.bagli?'Kayıtlı · değiştirmek için yazın':''}">`)}${fld('SMS başlığı (gönderici adı)',`<input id="n_baslik" value="${esc(n.baslik)}" maxlength="11">`)}
@@ -2061,13 +2070,13 @@ const VIEWS={gorusmeler:vGorusmeler,takvim:vTakvim,randevu:()=>vRandevu('asistan
 const HS={liste:null,hata:''};
 /* ---- Olay kaydı (yönetici) ---- */
 const OL={liste:null,kisiler:[],hata:'',f:{grup:'',kisi:'',bas:'',bit:''},sayfa:0,devam:false,yukleniyor:false};
-const OLAY_AD={gecmis_seans_eklendi:'Geçmiş seans eklendi',giris:'Giriş yaptı',giris_hatali:'Hatalı giriş denemesi',giris_kilitli:'Giriş geçici olarak bekletildi',cikis:'Çıkış yaptı',
+const OLAY_AD={gecmis_seans_eklendi:'Geçmiş seans eklendi',sms_canli:'SMS açıldı (canlı)',sms_test_secildi:'SMS test moduna alındı',giris:'Giriş yaptı',giris_hatali:'Hatalı giriş denemesi',giris_kilitli:'Giriş geçici olarak bekletildi',cikis:'Çıkış yaptı',
   yetkisiz_istek:'Yetkisiz istek',yetkisiz_yazma:'Yetkisi olmayan değişiklik denemesi',yonetici_onay_hatali:'Yönetici şifre onayı hatalı',sifre_degisim_hatali:'Şifre değiştirirken eski şifre hatalı',
   sifre_degisti:'Şifresini değiştirdi',hesap_olusturuldu:'Hesap açıldı',hesap_guncellendi:'Hesap güncellendi',hesap_silindi:'Hesap silindi',hesap_sifre_sifirlandi:'Şifre sıfırlandı',hesap_oturum_kapatildi:'Oturumları kapatıldı',
   danisan_anonimlestirildi:'Danışan anonimleştirildi (KVKK)',aktarim_basladi:'Veri aktarımı başladı',aktarim_tamamlandi:'Veri aktarımı tamamlandı',yedek_indirildi:'Tüm verilerin yedeği indirildi',veri_kaydedildi:'Kayıt değişikliği',
   sms_ayar_kaydedildi:'SMS ayarı kaydedildi',sms_ayar_silindi:'SMS ayarı silindi',sms_kilit:'SMS gönderimi engellendi (ana anahtar kapalı)',sms_reddedildi:'SMS reddedildi',sms_sinir:'SMS sınırı aşıldı',sms_test:'Test SMS',sms_test_modu:'SMS test modu',
   planli_sms_olusturuldu:'Planlı SMS oluşturuldu',planli_sms_iptal:'Planlı SMS iptal edildi',bildirim_ayar:'Bildirim ayarı değişti',sms_izinli:'SMS deneme numaraları değişti',sms_acildi:'SMS gönderimi AÇILDI',sms_durduruldu:'SMS gönderimi kapatıldı',sms_durduruldu_atlandi:'SMS kapalıyken gönderim atlandı',sms_bakiye:'SMS bakiyesi sorgulandı',uzman_sms_uzman_mesaj:'Uzmanlara SMS gönderildi',uzman_sms_dogum_gunu:'Doğum günü SMS’i gönderildi',kurulum:'Kurulum yapıldı',kurtarma_hatali:'Şifre kurtarma: hatalı deneme',yonetici_sifre_kurtarildi:'Yönetici şifresi kurtarıldı'};
-const OLAY_UYARI=new Set(['sms_acildi','giris_kilitli','yetkisiz_istek','yetkisiz_yazma','yonetici_onay_hatali','sifre_degisim_hatali','kurtarma_hatali','yonetici_sifre_kurtarildi','giris_hatali']);
+const OLAY_UYARI=new Set(['sms_canli','sms_acildi','giris_kilitli','yetkisiz_istek','yetkisiz_yazma','yonetici_onay_hatali','sifre_degisim_hatali','kurtarma_hatali','yonetici_sifre_kurtarildi','giris_hatali']);
 const tarayiciAd=u=>{u=u||'';const c=/Android/.test(u)?'Android':/iPhone|iPad/.test(u)?'iPhone':/Windows/.test(u)?'Windows':/Mac OS/.test(u)?'Mac':/Linux/.test(u)?'Linux':'';
   const t=/Edg\//.test(u)?'Edge':/SamsungBrowser/.test(u)?'Samsung':/OPR\//.test(u)?'Opera':/Firefox\//.test(u)?'Firefox':/Chrome\//.test(u)?'Chrome':/Safari\//.test(u)?'Safari':'';return[c,t].filter(Boolean).join(' · ')};
 function olYukle(){OL.yukleniyor=true;OL.hata='';const q=new URLSearchParams({...OL.f,sayfa:OL.sayfa});
@@ -2189,10 +2198,7 @@ function smsBakiyeCiz(){const e=$('#smsBakiyeIc');if(!e)return;e.className='smal
       ${p.length>ana.length?`<div class="small muted" style="margin-top:6px">${p.filter(x=>!ana.includes(x)).map(x=>esc(x.ad)+': '+esc(x.adet)).join(' · ')}</div>`:''}
       <div class="small muted" style="margin-top:6px">Son sorgu ${esc(o.zaman)} · NetGSM hesabındaki güncel bilgi</div>`})
   .catch(x=>{const el=$('#smsBakiyeIc');if(el){el.className='small';el.style.color='var(--danger)';el.textContent=x.message}})}
-const AFTER={ozet:()=>{if(!SUNUCU)return;if(UY.liste&&Date.now()-UY.t<120000)uyariCiz();else uyariYukle()},randevu:rInit,kendi:rInit,hesaplar:()=>{if(SUNUCU&&!HS.liste&&!HS.hata&&!HS.yukleniyor){HS.yukleniyor=true;API.cagir('hesaplar').then(o=>{HS.liste=o.hesaplar||[];hsOnar()}).catch(e=>{HS.hata=e.message}).finally(()=>{HS.yukleniyor=false;if(UI.view==='hesaplar')render()})}},smsayar:()=>{if(!SUNUCU)return;if(!UM.planli||Date.now()-UM.t>60000)umPlanliYukle();smsBakiyeCiz();API.cagir('sms-durum').then(o=>{const e=$('#smsMod');if(!e)return;e.hidden=false;IZ.panel=o.panel||[];IZ.mod=o.mod;IZ.yeni=[];IZ.sil=new Set();izinliCiz();
-  if(o.durduruldu){e.className='cmsg';e.innerHTML=`<span class="small muted">SMS açıldığında geçerli olacak mod: <b>${o.mod==='canli'?'Canlı — mesajlar danışanlara gider':'Test — '+(o.izinli.length?'yalnızca '+o.izinli.map(esc).join(', ')+' numarasına gider':'hiçbir numaraya gitmez')}</b></span>`;return}
-  if(o.mod==='canli'){e.className='cmsg err';e.innerHTML='<span><b>Canlı mod:</b> mesajlar danışanlara gerçekten gönderilir.</span>'}
-  else{e.className='cmsg ok';e.innerHTML=`<span><b>Test modu:</b> mesajlar ${o.izinli.length?'yalnızca şu numaralara gerçekten gider: '+o.izinli.map(esc).join(', ')+'. Diğerleri gönderilmeden kaydedilir.':'hiçbir numaraya gönderilmez, yalnızca kaydedilir.'}</span>`}}).catch(()=>{})}};
+const AFTER={ozet:()=>{if(!SUNUCU)return;if(UY.liste&&Date.now()-UY.t<120000)uyariCiz();else uyariYukle()},randevu:rInit,kendi:rInit,hesaplar:()=>{if(SUNUCU&&!HS.liste&&!HS.hata&&!HS.yukleniyor){HS.yukleniyor=true;API.cagir('hesaplar').then(o=>{HS.liste=o.hesaplar||[];hsOnar()}).catch(e=>{HS.hata=e.message}).finally(()=>{HS.yukleniyor=false;if(UI.view==='hesaplar')render()})}},smsayar:()=>{if(!SUNUCU)return;if(!UM.planli||Date.now()-UM.t>60000)umPlanliYukle();smsBakiyeCiz();API.cagir('sms-durum').then(o=>{SD.secim=o.secim||(o.durduruldu?'kapali':o.mod);SD.izinli=o.izinli||[];SD.kalici=!!o.kalici;SENK.smsKapali=SD.secim==='kapali';IZ.panel=o.panel||[];IZ.mod=o.mod;IZ.yeni=[];IZ.sil=new Set();smsDurumCiz();izinliCiz()}).catch(()=>{})}};
 
 /* ============ Aksiyonlar ============ */
 const A={
@@ -2782,6 +2788,15 @@ Object.assign(A,{
   izKaydet(d,el){const onay=val('iz_onay');if(!onay){toast('Şifrenizi girin.',1);return}el.disabled=true;
     API.cagir('sms-izinli',{onay,tut:IZ.panel.filter(e=>!IZ.sil.has(e.id)).map(e=>e.id),yeni:IZ.yeni.map(e=>e.uzmanId?{uzmanId:e.uzmanId}:{tel:e.tel,ad:e.ad})})
       .then(()=>{toast('Deneme numaraları kaydedildi.');render()}).catch(e=>{el.disabled=false;toast(e.message,1)})},
+  smsSec(d,el){const v=d.v;if(v===SD.secim)return;
+    if(v==='kapali'){el.disabled=true;API.cagir('sms-mod',{mod:'kapali'}).then(()=>{SD.secim='kapali';SENK.smsKapali=true;smsDurumCiz();toast('SMS kapatıldı. Hiçbir numaraya SMS gitmeyecek.')}).catch(e=>{el.disabled=false;toast(e.message,1)});return}
+    const canli=v==='canli';
+    sheet(canli?'SMS\'i aç (canlı)':'SMS test modu',`<div class="cmsg ${canli?'err':'warn'}"><span>${canli?'<b>Bundan sonra SMS\'ler gerçek danışanlara ve uzmanlara gider:</b> yeni randevu, erteleme, iptal ve Toplu SMS. Uzman bazındaki SMS ayarı geçerli kalır. Sorun olursa “Kapalı”ya basmanız yeterli.':`SMS yalnızca deneme numaralarına gider${SD.izinli.length?': '+SD.izinli.map(esc).join(', '):' (liste şu an boş)'}.`}</span></div>
+      ${canli?'<label class="chk"><input type="checkbox" id="sm_anladim"> Danışanlara gerçek SMS gideceğini anlıyorum</label>':''}
+      ${fld('Kendi şifreniz (onay için)','<div class="pw"><input id="sm_onay" type="password" autocomplete="current-password"></div>')}`,
+      `<button class="btn" data-act="kapat">Vazgeç</button><button class="btn ${canli?'danger':'primary'}" data-act="smsSecOnay" data-v="${v}">${canli?'SMS\'i aç':'Test moduna geç'}</button>`)},
+  smsSecOnay(d,el){const v=d.v;if(v==='canli'&&!chk('sm_anladim')){toast('Onay kutusunu işaretleyin.',1);return}if(!val('sm_onay')){toast('Şifrenizi yazın.',1);return}
+    el.disabled=true;API.cagir('sms-mod',{mod:v,onay:val('sm_onay'),anladim:v==='canli'?1:0}).then(()=>{SD.secim=v;SENK.smsKapali=false;IZ.mod=v;kapat();render();toast(v==='canli'?'SMS açıldı: mesajlar artık danışanlara gidiyor.':'Test moduna geçildi: SMS yalnızca deneme numaralarına gider.')}).catch(e=>{el.disabled=false;toast(e.message,1)})},
   smsAnahtarKapat(d,el){el.disabled=true;API.cagir('sms-anahtar',{acik:false}).then(()=>{SENK.smsKapali=true;render();toast('SMS gönderimi kapatıldı. Hiçbir numaraya SMS gitmeyecek.')}).catch(e=>{el.disabled=false;toast(e.message,1)})},
   smsAnahtarAc(){sheet('SMS gönderimini aç',`<div class="cmsg err"><span>Açtığınızda SMS'ler gönderilmeye başlar. Test modundaysa yalnızca test numaralarına, canlı moddaysa danışanlara ve uzmanlara gider.</span></div>
     ${fld('Kendi şifreniz (onay için)','<div class="pw"><input id="sa_onay" type="password" autocomplete="current-password"></div>')}`,
