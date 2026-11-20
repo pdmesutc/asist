@@ -978,10 +978,15 @@ function alicilar(d){const a=[];if(!d)return a;
   if(d.sms.baba&&d.baba&&d.baba.tel)a.push({ad:d.baba.ad,tel:d.baba.tel});
   if(d.sms.veli&&d.veli&&d.veli.tel)a.push({ad:d.veli.ad,tel:d.veli.tel});return a}
 /* Sunucu modunda SMS'ler toplanıp tek istekte sunucuya gönderilir; sunucu NetGSM'e iletir */
+// Bekleyen kayıtlar sunucuya gidene kadar bekler (en fazla 20 sn)
+async function senkBekle(ms=20000){const t0=Date.now();while(Date.now()-t0<ms){if(!SENK.gidiyor&&!SENK.yukleniyor){if(!SENK.degisiklikler().length)return true;await SENK.gonder();continue}await new Promise(r=>setTimeout(r,120))}return false}
 const SMSQ={k:[],t:null,ekle(x){SMSQ.k.push(x);if(!SMSQ.t)SMSQ.t=setTimeout(SMSQ.gonder,60)},
-  async gonder(){SMSQ.t=null;const l=SMSQ.k.splice(0);if(!l.length)return;const gecerli=l.filter(x=>/^5\d{9}$/.test(normTel(x.tel)));const sonuc=new Map();let hata='';
+  async gonder(){SMSQ.t=null;const l=SMSQ.k.splice(0);if(!l.length)return;
+    // Sunucu SMS'i seans kaydına göre doğrular: önce bekleyen kayıtlar sunucuya ulaşmalı (yoksa yeni seansın SMS'i reddedilir)
+    await senkBekle();const gecerli=l.filter(x=>/^5\d{9}$/.test(normTel(x.tel)));const sonuc=new Map();let hata='';
     for(let i=0;i<gecerli.length;i+=300){const p=gecerli.slice(i,i+300);
-      try{const o=await API.cagir('sms',{mesajlar:p.map(x=>({tel:normTel(x.tel),metin:x.metin,seansId:x.seansId}))});const atl=new Set(o.atlanan||[]);if(o.durduruldu)SENK.smsKapali=true;p.forEach(x=>sonuc.set(x.id,o.durduruldu?'SMS kapalı · gönderilmedi':o.simulasyon?'Simülasyon':atl.has(normTel(x.tel))?'Test modu · gönderilmedi':'Gönderildi'))}
+      try{const o=await API.cagir('sms',{mesajlar:p.map(x=>({tel:normTel(x.tel),metin:x.metin,seansId:x.seansId}))});const atl=new Set(o.atlanan||[]);const red=new Map((o.reddedilen||[]).map(r=>[r.tel,r.neden]));if(o.durduruldu)SENK.smsKapali=true;
+        p.forEach(x=>{const t=normTel(x.tel);sonuc.set(x.id,o.durduruldu?'SMS kapalı · gönderilmedi':o.simulasyon?'Simülasyon':red.has(t)?(red.get(t)==='kapali'?'Uzman SMS kapalı · gönderilmedi':'Reddedildi · numara seansla eşleşmedi'):atl.has(t)?'Test modu · gönderilmedi':'Gönderildi')})}
       catch(e){hata=e.message;p.forEach(x=>sonuc.set(x.id,'Gönderilemedi'))}}
     l.forEach(x=>{const r=S.smsLog.find(y=>y.id===x.id);if(r)r.durum=sonuc.get(x.id)||'Geçersiz numara'});
     if(hata)toast('SMS gönderilemedi: '+hata,1);commit()}};
@@ -1109,7 +1114,8 @@ function iptalUyari(d){const sinir=addDays(TODAY,-365);const l=S.seanslar.filter
     <span class="small muted">Randevu yine verilebilir; karar sizde.</span></div>`}
 /* ============ ASİSTAN: Görüşmeler ============ */
 function seansCard(s,opt){opt=opt||{};
-  const d=D(s.danisanId),u=U(s.uzmanId),o=O(s.odaId),fs=s.kaynak==='firma'?F(s.firmaId):null;
+  // Eksik bağlı kayıt (silinmiş/erişilemeyen) tüm listeyi bozmasın
+  const d=D(s.danisanId)||{id:s.danisanId,ad:'Kayıt bulunamadı',tel:'',sms:{},tur:''},u=U(s.uzmanId)||{id:s.uzmanId,ad:'—',sms:false,alanlar:[],subeIds:[]},o=O(s.odaId)||{id:s.odaId,ad:'—',tur:''},fs=s.kaynak==='firma'?F(s.firmaId):null;
   const fin=!opt.psikolog;
   let act='';
   if(fin){
